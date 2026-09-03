@@ -150,6 +150,18 @@ module.exports = {
       list: values.list,
     });
 
+    sails.helpers.cards.createIgdbCover
+      .with({
+        card,
+        project: inputs.project,
+        board: values.board,
+        list: values.list,
+        creatorUser: values.creatorUser,
+      })
+      .tolerate((error) => {
+        sails.log.warn(`Unable to create IGDB cover for card ${card.id}: ${error.stack}`);
+      });
+
     return card;
   },
 };

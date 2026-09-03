@@ -28,7 +28,7 @@ const envToBytes = (value) => bytes(value);
 
 const envToArray = (value) => (value ? value.split(',') : []);
 
-const baseUrl = envToArray(process.env.BASE_URL)[0];
+const baseUrl = envToArray(process.env.BASE_URL)[0] || 'http://localhost:1337';
 const parsedBasedUrl = new URL(baseUrl);
 
 module.exports.custom = {
