@@ -27,6 +27,8 @@ const Filters = React.memo(() => {
   const board = useSelector(selectors.selectCurrentBoard);
   const userIds = useSelector(selectors.selectFilterUserIdsForCurrentBoard);
   const labelIds = useSelector(selectors.selectFilterLabelIdsForCurrentBoard);
+  const filterMode = board.filterMode || 'ANY';
+  const sortCardsAlphabetically = board.sortCardsAlphabetically || false;
   const currentUserId = useSelector(selectors.selectCurrentUserId);
 
   const withCurrentUserSelector = useSelector(
@@ -138,6 +140,16 @@ const Filters = React.memo(() => {
     cancelSearch();
   }, [cancelSearch]);
 
+  const handleFilterModeClick = useCallback(() => {
+    const modes = ['ANY', 'AND', 'ONLY'];
+    const nextMode = modes[(modes.indexOf(filterMode) + 1) % modes.length];
+    dispatch(entryActions.updateFilterModeInCurrentBoard(board.id, nextMode));
+  }, [board.id, dispatch, filterMode]);
+
+  const handleSortClick = useCallback(() => {
+    dispatch(entryActions.updateCardSortInCurrentBoard(board.id, !sortCardsAlphabetically));
+  }, [board.id, dispatch, sortCardsAlphabetically]);
+
   useDidUpdate(() => {
     setSearch(board.search);
   }, [board.search]);
@@ -211,6 +223,22 @@ const Filters = React.memo(() => {
           onChange={handleSearchChange}
           onBlur={handleSearchBlur}
         />
+        <button
+          type="button"
+          className={classNames(styles.modeButton, filterMode !== 'ANY' && styles.activeButton)}
+          onClick={handleFilterModeClick}
+          title="Filter mode"
+        >
+          {filterMode}
+        </button>
+        <button
+          type="button"
+          className={classNames(styles.sortButton, sortCardsAlphabetically && styles.activeButton)}
+          onClick={handleSortClick}
+          title="Sort cards A-Z"
+        >
+          A-Z
+        </button>
       </span>
     </>
   );

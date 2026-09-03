@@ -88,4 +88,22 @@
       }
     }
   }
+
+  .modeButton,
+  .sortButton {
+    background: rgba(0, 0, 0, 0.24);
+    border: none;
+    border-radius: 3px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 24px;
+    margin-right: 4px;
+    min-width: 38px;
+    padding: 0 7px;
+  }
+
+  .activeButton {
+    background: rgba(255, 255, 255, 0.28);
+  }
 }

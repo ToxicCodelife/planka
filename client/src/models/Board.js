@@ -36,6 +36,8 @@ export default class extends BaseModel {
     context: attr(),
     view: attr(),
     search: attr(),
+    filterMode: attr({ getDefault: () => 'ANY' }),
+    sortCardsAlphabetically: attr({ getDefault: () => false }),
     isSubscribed: attr({
       getDefault: () => false,
     }),
@@ -232,6 +234,14 @@ export default class extends BaseModel {
         });
 
         break;
+      case ActionTypes.CURRENT_BOARD_FILTER_MODE_UPDATE:
+        Board.withId(payload.boardId).update({ filterMode: payload.value });
+
+        break;
+      case ActionTypes.CURRENT_BOARD_CARD_SORT_UPDATE:
+        Board.withId(payload.boardId).update({ sortCardsAlphabetically: payload.value });
+
+        break;
       case ActionTypes.BOARD_DELETE:
         Board.withId(payload.id).deleteWithRelated();
 
@@ -358,38 +368,49 @@ export default class extends BaseModel {
       }
     }
 
-    const filterUserIds = this.filterUsers.toRefArray().map((user) => user.id);
+    cardModels = cardModels.filter((cardModel) => this.isCardMatchingFilters(cardModel));
 
-    if (filterUserIds.length > 0) {
-      cardModels = cardModels.filter((cardModel) => {
-        const users = cardModel.users.toRefArray();
-
-        if (users.some((user) => filterUserIds.includes(user.id))) {
-          return true;
-        }
-
-        return cardModel
-          .getTaskListsQuerySet()
-          .toModelArray()
-          .some((taskListModel) =>
-            taskListModel
-              .getTasksQuerySet()
-              .toRefArray()
-              .some((task) => task.assigneeUserId && filterUserIds.includes(task.assigneeUserId)),
-          );
-      });
-    }
-
-    const filterLabelIds = this.filterLabels.toRefArray().map((label) => label.id);
-
-    if (filterLabelIds.length > 0) {
-      cardModels = cardModels.filter((cardModel) => {
-        const labels = cardModel.labels.toRefArray();
-        return labels.some((label) => filterLabelIds.includes(label.id));
-      });
+    if (this.sortCardsAlphabetically) {
+      cardModels.sort(
+        (card1, card2) =>
+          card1.name.localeCompare(card2.name, undefined, { sensitivity: 'base' }) ||
+          card1.position - card2.position,
+      );
     }
 
     return cardModels;
+  }
+
+  isCardMatchingFilters(cardModel) {
+    const filterUserIds = this.filterUsers.toRefArray().map((user) => user.id);
+    const filterLabelIds = this.filterLabels.toRefArray().map((label) => label.id);
+    const userIds = [
+      ...new Set([
+        ...cardModel.users.toRefArray().map((user) => user.id),
+        ...cardModel
+          .getTaskListsQuerySet()
+          .toModelArray()
+          .flatMap((taskListModel) =>
+            taskListModel
+              .getTasksQuerySet()
+              .toRefArray()
+              .flatMap((task) => (task.assigneeUserId ? [task.assigneeUserId] : [])),
+          ),
+      ]),
+    ];
+    const labelIds = [...new Set(cardModel.labels.toRefArray().map((label) => label.id))];
+    const matches = (selectedIds, cardIds) => {
+      if (selectedIds.length === 0) return true;
+      if (this.filterMode === 'ONLY') {
+        return (
+          selectedIds.length === cardIds.length && selectedIds.every((id) => cardIds.includes(id))
+        );
+      }
+      if (this.filterMode === 'AND') return selectedIds.every((id) => cardIds.includes(id));
+      return selectedIds.some((id) => cardIds.includes(id));
+    };
+
+    return matches(filterUserIds, userIds) && matches(filterLabelIds, labelIds);
   }
 
   getActivitiesModelArray() {

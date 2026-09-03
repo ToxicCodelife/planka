@@ -356,35 +356,14 @@ export default class extends BaseModel {
       }
     }
 
-    const filterUserIds = this.board.filterUsers.toRefArray().map((user) => user.id);
+    cardModels = cardModels.filter((cardModel) => this.board.isCardMatchingFilters(cardModel));
 
-    if (filterUserIds.length > 0) {
-      cardModels = cardModels.filter((cardModel) => {
-        const users = cardModel.users.toRefArray();
-
-        if (users.some((user) => filterUserIds.includes(user.id))) {
-          return true;
-        }
-
-        return cardModel
-          .getTaskListsQuerySet()
-          .toModelArray()
-          .some((taskListModel) =>
-            taskListModel
-              .getTasksQuerySet()
-              .toRefArray()
-              .some((task) => task.assigneeUserId && filterUserIds.includes(task.assigneeUserId)),
-          );
-      });
-    }
-
-    const filterLabelIds = this.board.filterLabels.toRefArray().map((label) => label.id);
-
-    if (filterLabelIds.length > 0) {
-      cardModels = cardModels.filter((cardModel) => {
-        const labels = cardModel.labels.toRefArray();
-        return labels.some((label) => filterLabelIds.includes(label.id));
-      });
+    if (this.board.sortCardsAlphabetically) {
+      cardModels.sort(
+        (card1, card2) =>
+          card1.name.localeCompare(card2.name, undefined, { sensitivity: 'base' }) ||
+          card1.position - card2.position,
+      );
     }
 
     return cardModels;

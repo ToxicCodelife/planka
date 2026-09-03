@@ -4,6 +4,7 @@
  */
 
 import EntryActionTypes from '../constants/EntryActionTypes';
+import ActionTypes from '../constants/ActionTypes';
 
 const createBoardInCurrentProject = (data) => ({
   type: EntryActionTypes.BOARD_IN_CURRENT_PROJECT_CREATE,
@@ -79,6 +80,16 @@ const searchInCurrentBoard = (value) => ({
   },
 });
 
+const updateFilterModeInCurrentBoard = (boardId, value) => ({
+  type: ActionTypes.CURRENT_BOARD_FILTER_MODE_UPDATE,
+  payload: { boardId, value },
+});
+
+const updateCardSortInCurrentBoard = (boardId, value) => ({
+  type: ActionTypes.CURRENT_BOARD_CARD_SORT_UPDATE,
+  payload: { boardId, value },
+});
+
 const deleteBoard = (id) => ({
   type: EntryActionTypes.BOARD_DELETE,
   payload: {
@@ -104,6 +115,8 @@ export default {
   updateContextInCurrentBoard,
   updateViewInCurrentBoard,
   searchInCurrentBoard,
+  updateFilterModeInCurrentBoard,
+  updateCardSortInCurrentBoard,
   deleteBoard,
   handleBoardDelete,
 };
