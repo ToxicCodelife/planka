@@ -20,9 +20,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      # Explicitly compile the Planka frontend assets before packing the container
       - name: Install and Build Frontend Dependencies
         run: |
           npm ci
@@ -41,12 +39,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Lowercase Repository Owner Name
+        run: |
+          echo "OWNER_LOWERCASE=${OWNER,,}" >> $GITHUB_ENV
+        env:
+          OWNER: '${{ github.repository_owner }}'
+
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/planka:latest
+            ghcr.io/${{ env.OWNER_LOWERCASE }}/planka:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
