@@ -16,6 +16,24 @@ const MIN_SECRET_KEY_LENGTH = 32;
 
 const RULE = '─'.repeat(72);
 
+const isNonEmptyString = (value) => typeof value === 'string' && value.trim().length > 0;
+
+const castIdToBigIntString = (value) => {
+  if (_.isNull(value) || _.isUndefined(value) || value === '') {
+    return null;
+  }
+
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint') {
+    return null;
+  }
+
+  try {
+    return BigInt(value).toString();
+  } catch (error) {
+    return null;
+  }
+};
+
 // Loud on purpose. This is not a misconfiguration that degrades a feature; it
 // is the difference between sessions that can be forged and sessions that
 // cannot, and it is invisible from inside a working instance.
@@ -30,22 +48,35 @@ module.exports.bootstrap = async () => {
   setImmediate(async () => {
     try {
       const cards = await Card.find({
-        or: [{ coverAttachmentId: null }, { coverAttachmentId: '' }],
+        coverAttachmentId: null,
       });
 
       await cards.reduce(
         (promise, card) =>
           promise.then(async () => {
             try {
-              const { list, board, project } = await sails.helpers.lists.getPathToProjectById(
-                card.listId,
-              );
+              if (!isNonEmptyString(card.name)) {
+                sails.log.warn(`IGDB cover scan skipped card ${card.id}: name is empty`);
+                return;
+              }
+
+              const cardId = castIdToBigIntString(card.id);
+              const listId = castIdToBigIntString(card.listId);
+              const creatorUserId = castIdToBigIntString(card.creatorUserId);
+
+              if (!cardId || !listId || (card.creatorUserId && !creatorUserId)) {
+                sails.log.warn(`IGDB cover scan skipped card ${card.id}: invalid foreign key`);
+                return;
+              }
+
+              const { list, board, project } =
+                await sails.helpers.lists.getPathToProjectById(listId);
               await sails.helpers.cards.attachIgdbCover.with({
-                card,
+                card: { ...card, id: cardId },
                 project,
                 board,
                 list,
-                creatorUser: card.creatorUserId ? await User.findOne(card.creatorUserId) : null,
+                creatorUser: creatorUserId ? await User.findOne(creatorUserId) : null,
               });
             } catch (error) {
               sails.log.warn(`IGDB cover scan failed for card ${card.id}: ${error.message}`);
