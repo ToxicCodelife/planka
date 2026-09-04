@@ -30,16 +30,15 @@ module.exports = {
 
       const token = await getTwitchToken();
 
-      // Step 1: Query game database ID from title with strict text body formatting
       const gameRes = await axios({
-        url: 'https://api.igdb.com/v4/games',
+        url: 'https://igdb.com',
         method: 'POST',
         headers: {
           'Client-ID': process.env.IGDB_CLIENT_ID,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
         },
-        data: String(`search "${inputs.card.name}"; fields id; limit 1;`),
+        data: `search "${inputs.card.name}"; fields id; limit 1;`,
       });
 
       if (!gameRes.data || gameRes.data.length === 0) {
@@ -47,7 +46,6 @@ module.exports = {
       }
       const gameId = gameRes.data[0].id;
 
-      // Step 2: Use ID to query cover image URL
       const coverRes = await axios({
         url: 'https://igdb.com',
         method: 'POST',
@@ -56,7 +54,7 @@ module.exports = {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
         },
-        data: String(`fields url; where game = ${gameId};`),
+        data: `fields url; where game = ${gameId};`,
       });
 
       if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data[0].url) {
@@ -64,14 +62,12 @@ module.exports = {
       }
       const highResUrl = `https:${coverRes.data[0].url.replace('t_thumb', 't_cover_big')}`;
 
-      // Step 3: Stream download image file data
       const imgStream = await axios({
         method: 'get',
         url: highResUrl,
         responseType: 'stream',
       });
 
-      // Step 4: Inject into Planka's native attachment upload handler natively
       const attachment = await sails.helpers.attachments.createOne.with({
         project: inputs.project,
         board: inputs.board,
