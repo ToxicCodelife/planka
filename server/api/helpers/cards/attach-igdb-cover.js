@@ -7,7 +7,7 @@ async function getTwitchToken() {
     throw new Error('Missing IGDB credentials');
   }
 
-  const url = `https://twitch.tv${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`;
+  const url = `https://id.twitch.tv/oauth2/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`;
   const res = await axios.post(url);
   return res.data.access_token;
 }
