@@ -214,6 +214,18 @@ module.exports = {
       })
       .intercept('positionMustBeInValues', () => Errors.POSITION_MUST_BE_PRESENT);
 
+    setImmediate(() => {
+      sails.helpers.cards.attachIgdbCover
+        .with({
+          card,
+          project,
+          board,
+          list,
+          creatorUser: currentUser,
+        })
+        .catch((error) => sails.log.warn(`IGDB cover attachment failed: ${error.message}`));
+    });
+
     return {
       item: card,
     };

@@ -1,7 +1,8 @@
 const { request } = require('undici');
+const axios = require('axios');
 
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
-const IGDB_URL = 'https://api.igdb.com/v4/covers';
+const IGDB_URL = 'https://api.igdb.com/v4';
 
 let accessToken;
 let tokenExpiresAt = 0;
@@ -16,27 +17,42 @@ module.exports = {
     }
 
     const token = await this.getAccessToken(clientId, clientSecret);
-    const response = await request(IGDB_URL, {
-      method: 'POST',
-      headers: {
-        'Client-ID': clientId,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'text/plain',
+    const gameResponse = await axios.post(
+      `${IGDB_URL}/games`,
+      `search ${JSON.stringify(gameName)}; fields id; limit 1;`,
+      {
+        headers: {
+          'Client-ID': clientId,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'text/plain',
+        },
       },
-      body: `search ${JSON.stringify(gameName)}; fields url; limit 1;`,
-    });
+    );
 
-    if (response.statusCode >= 400) {
-      throw new Error(`IGDB cover lookup failed with status ${response.statusCode}`);
+    const [game] = gameResponse.data;
+    if (!game) {
+      return null;
     }
 
-    const [cover] = await response.body.json();
+    const coverResponse = await axios.post(
+      `${IGDB_URL}/covers`,
+      `fields url; where game = ${game.id};`,
+      {
+        headers: {
+          'Client-ID': clientId,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'text/plain',
+        },
+      },
+    );
+
+    const [cover] = coverResponse.data;
     if (!cover || !cover.url) {
       return null;
     }
 
     const coverUrl = cover.url.replace('t_thumb', 't_cover_big');
-    return coverUrl.startsWith('//') ? `https:${coverUrl}` : coverUrl;
+    return coverUrl.startsWith('http') ? coverUrl : `https:${coverUrl}`;
   },
 
   async getAccessToken(clientId, clientSecret) {

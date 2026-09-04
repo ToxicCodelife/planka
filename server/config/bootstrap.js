@@ -27,6 +27,37 @@ const warn = (headline, detail) => {
 };
 
 module.exports.bootstrap = async () => {
+  setImmediate(async () => {
+    try {
+      const cards = await Card.find({
+        or: [{ coverAttachmentId: null }, { coverAttachmentId: '' }],
+      });
+
+      await cards.reduce(
+        (promise, card) =>
+          promise.then(async () => {
+            try {
+              const { list, board, project } = await sails.helpers.lists.getPathToProjectById(
+                card.listId,
+              );
+              await sails.helpers.cards.attachIgdbCover.with({
+                card,
+                project,
+                board,
+                list,
+                creatorUser: card.creatorUserId ? await User.findOne(card.creatorUserId) : null,
+              });
+            } catch (error) {
+              sails.log.warn(`IGDB cover scan failed for card ${card.id}: ${error.message}`);
+            }
+          }),
+        Promise.resolve(),
+      );
+    } catch (error) {
+      sails.log.warn(`IGDB cover scan failed: ${error.message}`);
+    }
+  });
+
   const secretKey = sails.config.session.secret;
 
   if (!secretKey) {
