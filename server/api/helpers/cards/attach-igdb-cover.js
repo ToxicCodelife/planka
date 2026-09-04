@@ -43,7 +43,7 @@ module.exports = {
       if (!gameRes.data || gameRes.data.length === 0) {
         return;
       }
-      const gameId = gameRes.data[0].id;
+      const gameId = gameRes.data.id;
 
       const coverRes = await axios({
         url: 'https://igdb.com',
@@ -55,10 +55,10 @@ module.exports = {
         data: `fields url; where game = ${gameId};`,
       });
 
-      if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data[0].url) {
+      if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data.url) {
         return;
       }
-      const highResUrl = `https:${coverRes.data[0].url.replace('t_thumb', 't_cover_big')}`;
+      const highResUrl = `https:${coverRes.data.url.replace('t_thumb', 't_cover_big')}`;
 
       const imgStream = await axios({
         method: 'get',
