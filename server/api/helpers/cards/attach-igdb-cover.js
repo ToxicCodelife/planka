@@ -1,8 +1,8 @@
 const axios = require('axios');
 
 async function getTwitchToken() {
-  const clientId = process.env.IGDB_CLIENT_ID;
-  const clientSecret = process.env.IGDB_CLIENT_SECRET;
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  const clientSecret = process.env.TWITCH_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     throw new Error('Missing IGDB credentials');
@@ -13,12 +13,15 @@ async function getTwitchToken() {
   params.append('client_secret', clientSecret);
   params.append('grant_type', 'client_credentials');
 
-  const res = await axios.post('https://twitch.tv', params);
+  const res = await axios.post('https://id.twitch.tv/oauth2/token', params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
   return res.data.access_token;
 }
 
 module.exports = {
   friendlyName: 'Attach IGDB cover',
+
   inputs: {
     card: { type: 'ref', required: true },
     project: { type: 'ref', required: true },
@@ -39,7 +42,7 @@ module.exports = {
         url: 'https://igdb.com',
         method: 'POST',
         headers: {
-          'Client-ID': process.env.IGDB_CLIENT_ID,
+          'Client-ID': process.env.TWITCH_CLIENT_ID,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
         },
@@ -55,7 +58,7 @@ module.exports = {
         url: 'https://igdb.com',
         method: 'POST',
         headers: {
-          'Client-ID': process.env.IGDB_CLIENT_ID,
+          'Client-ID': process.env.TWITCH_CLIENT_ID,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
         },
