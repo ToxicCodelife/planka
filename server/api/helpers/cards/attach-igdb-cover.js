@@ -1,7 +1,6 @@
 const axios = require('axios');
 
 async function getTwitchToken() {
-  // Use a fallback fail-safe: Check custom config first, then try raw environment variables
   const clientId = sails.config.custom.twitchClientId || process.env.TWITCH_CLIENT_ID;
   const clientSecret = sails.config.custom.twitchClientSecret || process.env.TWITCH_CLIENT_SECRET;
 
@@ -14,7 +13,7 @@ async function getTwitchToken() {
   params.append('client_secret', clientSecret);
   params.append('grant_type', 'client_credentials');
 
-  const res = await axios.post('https://id.twitch.tv/oauth2/token', params, {
+  const res = await axios.post('https://twitch.tv', params, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   return res.data.access_token;
@@ -37,14 +36,13 @@ module.exports = {
         return;
       }
 
-      // Safe fallback variables for the main loop
       const clientId = sails.config.custom.twitchClientId || process.env.TWITCH_CLIENT_ID;
       const token = await getTwitchToken();
 
       if (!clientId || !token) return;
 
       const gameRes = await axios({
-        url: 'https://api.igdb.com/v4/games',
+        url: 'https://igdb.com',
         method: 'POST',
         headers: {
           'Client-ID': clientId,
@@ -58,7 +56,8 @@ module.exports = {
       if (!gameRes.data || gameRes.data.length === 0) {
         return;
       }
-      const gameId = gameRes.data[0].id; // Re-added proper array indexing for IGDB matching
+      // Target the first item in the array explicitly
+      const gameId = gameRes.data[0].id;
 
       const coverRes = await axios({
         url: 'https://igdb.com',
@@ -75,6 +74,7 @@ module.exports = {
       if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data[0].url) {
         return;
       }
+      // Target the first item cover URL in the array explicitly
       const highResUrl = `https:${coverRes.data[0].url.replace('t_thumb', 't_cover_big')}`;
 
       const imgStream = await axios({
