@@ -1,11 +1,12 @@
 const axios = require('axios');
 
 async function getTwitchToken() {
-  const clientId = process.env.TWITCH_CLIENT_ID;
-  const clientSecret = process.env.TWITCH_CLIENT_SECRET;
+  // Use a fallback fail-safe: Check custom config first, then try raw environment variables
+  const clientId = sails.config.custom.twitchClientId || process.env.TWITCH_CLIENT_ID;
+  const clientSecret = sails.config.custom.twitchClientSecret || process.env.TWITCH_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    throw new Error('Missing IGDB credentials');
+    throw new Error('Missing Twitch credentials globally inside container space');
   }
 
   const params = new URLSearchParams();
@@ -13,7 +14,7 @@ async function getTwitchToken() {
   params.append('client_secret', clientSecret);
   params.append('grant_type', 'client_credentials');
 
-  const res = await axios.post('https://twitch.tv', params, {
+  const res = await axios.post('https://id.twitch.tv/oauth2/token', params, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   return res.data.access_token;
@@ -36,13 +37,17 @@ module.exports = {
         return;
       }
 
+      // Safe fallback variables for the main loop
+      const clientId = sails.config.custom.twitchClientId || process.env.TWITCH_CLIENT_ID;
       const token = await getTwitchToken();
+
+      if (!clientId || !token) return;
 
       const gameRes = await axios({
         url: 'https://api.igdb.com/v4/games',
         method: 'POST',
         headers: {
-          'Client-ID': process.env.TWITCH_CLIENT_ID,
+          'Client-ID': clientId,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
           'User-Agent': 'Planka-IGDB-CustomFork/1.0',
@@ -53,13 +58,13 @@ module.exports = {
       if (!gameRes.data || gameRes.data.length === 0) {
         return;
       }
-      const gameId = gameRes.data[0].id;
+      const gameId = gameRes.data[0].id; // Re-added proper array indexing for IGDB matching
 
       const coverRes = await axios({
-        url: 'https://api.igdb.com/v4/games',
+        url: 'https://igdb.com',
         method: 'POST',
         headers: {
-          'Client-ID': process.env.TWITCH_CLIENT_ID,
+          'Client-ID': clientId,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
           'User-Agent': 'Planka-IGDB-CustomFork/1.0',
