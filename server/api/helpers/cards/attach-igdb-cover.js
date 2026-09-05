@@ -39,7 +39,7 @@ module.exports = {
       const token = await getTwitchToken();
 
       const gameRes = await axios({
-        url: 'https://igdb.com',
+        url: 'https://api.igdb.com/v4/games',
         method: 'POST',
         headers: {
           'Client-ID': process.env.TWITCH_CLIENT_ID,
@@ -56,7 +56,7 @@ module.exports = {
       const gameId = gameRes.data[0].id;
 
       const coverRes = await axios({
-        url: 'https://igdb.com',
+        url: 'https://api.igdb.com/v4/games',
         method: 'POST',
         headers: {
           'Client-ID': process.env.TWITCH_CLIENT_ID,
