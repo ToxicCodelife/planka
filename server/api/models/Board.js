@@ -125,17 +125,6 @@ module.exports = {
       defaultsTo: Views.KANBAN,
       columnName: 'default_view',
     },
-    defaultCardType: {
-      type: 'string',
-      defaultsTo: 'project',
-      columnName: 'default_card_type',
-    },
-
-    limitCardTypesToDefaultOne: {
-      type: 'boolean',
-      defaultsTo: false,
-      columnName: 'limit_card_types_to_default_one',
-    },
     alwaysDisplayCardCreator: {
       type: 'boolean',
       defaultsTo: false,
