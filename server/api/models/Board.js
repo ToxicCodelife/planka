@@ -92,8 +92,6 @@
  *           example: 2024-01-01T00:00:00.000Z
  */
 
-const Card = require('./Card');
-
 const Views = {
   KANBAN: 'kanban',
   GRID: 'grid',
@@ -129,10 +127,10 @@ module.exports = {
     },
     defaultCardType: {
       type: 'string',
-      isIn: Object.values(Card.Types),
-      defaultsTo: Card.Types.PROJECT,
+      defaultsTo: 'project',
       columnName: 'default_card_type',
     },
+
     limitCardTypesToDefaultOne: {
       type: 'boolean',
       defaultsTo: false,
