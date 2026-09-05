@@ -3,12 +3,17 @@ const axios = require('axios');
 async function getTwitchToken() {
   const clientId = process.env.IGDB_CLIENT_ID;
   const clientSecret = process.env.IGDB_CLIENT_SECRET;
+
   if (!clientId || !clientSecret) {
     throw new Error('Missing IGDB credentials');
   }
 
-  const url = `https://twitch.tv{clientId}&client_secret=${clientSecret}&grant_type=client_credentials`;
-  const res = await axios.post(url);
+  const params = new URLSearchParams();
+  params.append('client_id', clientId);
+  params.append('client_secret', clientSecret);
+  params.append('grant_type', 'client_credentials');
+
+  const res = await axios.post('https://twitch.tv', params);
   return res.data.access_token;
 }
 
