@@ -13,7 +13,7 @@ async function getTwitchToken() {
   params.append('client_secret', clientSecret);
   params.append('grant_type', 'client_credentials');
 
-  const res = await axios.post('https://id.twitch.tv/oauth2/token', params, {
+  const res = await axios.post('https://twitch.tv', params, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
   return res.data.access_token;
@@ -45,6 +45,7 @@ module.exports = {
           'Client-ID': process.env.TWITCH_CLIENT_ID,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
+          'User-Agent': 'Planka-IGDB-CustomFork/1.0',
         },
         data: `search "${inputs.card.name}"; fields id; limit 1;`,
       });
@@ -61,6 +62,7 @@ module.exports = {
           'Client-ID': process.env.TWITCH_CLIENT_ID,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
+          'User-Agent': 'Planka-IGDB-CustomFork/1.0',
         },
         data: `fields url; where game = ${gameId};`,
       });
@@ -74,6 +76,9 @@ module.exports = {
         method: 'get',
         url: highResUrl,
         responseType: 'stream',
+        headers: {
+          'User-Agent': 'Planka-IGDB-CustomFork/1.0',
+        },
       });
 
       const attachment = await sails.helpers.attachments.createOne.with({
