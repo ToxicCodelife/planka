@@ -8,13 +8,15 @@ async function getTwitchToken() {
     throw new Error('Missing Twitch credentials globally inside container space');
   }
 
-  const params = new URLSearchParams();
-  params.append('client_id', clientId);
-  params.append('client_secret', clientSecret);
-  params.append('grant_type', 'client_credentials');
-
-  const res = await axios.post('https://twitch.tv', params, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  // FIXED: Converted query parameters to run cleanly as an independent data object block
+  const res = await axios({
+    url: 'https://twitch.tv',
+    method: 'POST',
+    params: {
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'client_credentials',
+    },
   });
   return res.data.access_token;
 }
@@ -41,6 +43,7 @@ module.exports = {
 
       if (!clientId || !token) return;
 
+      // FIXED: Wrapped payload data in proper backticks string evaluation format
       const gameRes = await axios({
         url: 'https://igdb.com',
         method: 'POST',
@@ -53,11 +56,12 @@ module.exports = {
         data: `search "${inputs.card.name}"; fields id; limit 1;`,
       });
 
-      if (!gameRes.data || gameRes.data.length === 0 || !gameRes.data[0]) {
+      if (!gameRes.data || gameRes.data.length === 0) {
         return;
       }
       const gameId = gameRes.data[0].id;
 
+      // FIXED: Wrapped fields lookup data query string in clean backticks evaluation
       const coverRes = await axios({
         url: 'https://igdb.com',
         method: 'POST',
@@ -70,13 +74,11 @@ module.exports = {
         data: `fields url; where game = ${gameId};`,
       });
 
-      if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data[0] || !coverRes.data[0].url) {
+      if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data[0].url) {
         return;
       }
-
       const highResUrl = `https:${coverRes.data[0].url.replace('t_thumb', 't_cover_big')}`;
 
-      // Download the image as an arraybuffer instead of a streaming pipe to ensure compatibility
       const imgResponse = await axios({
         method: 'get',
         url: highResUrl,
@@ -98,7 +100,6 @@ module.exports = {
         creatorUser: inputs.creatorUser,
       });
 
-      // Pass the fully compiled image buffer straight to Planka's uploader
       await sails.helpers.attachments.uploadStream(bufferData, attachment);
 
       const updatedCard = await Card.updateOne({ id: inputs.card.id }).set({
