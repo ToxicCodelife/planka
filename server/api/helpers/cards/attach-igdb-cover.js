@@ -53,10 +53,9 @@ module.exports = {
         data: `search "${inputs.card.name}"; fields id; limit 1;`,
       });
 
-      if (!gameRes.data || gameRes.data.length === 0) {
+      if (!gameRes.data || gameRes.data.length === 0 || !gameRes.data[0]) {
         return;
       }
-      // Target the first item in the array explicitly
       const gameId = gameRes.data[0].id;
 
       const coverRes = await axios({
@@ -71,20 +70,23 @@ module.exports = {
         data: `fields url; where game = ${gameId};`,
       });
 
-      if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data[0].url) {
+      if (!coverRes.data || coverRes.data.length === 0 || !coverRes.data[0] || !coverRes.data[0].url) {
         return;
       }
-      // Target the first item cover URL in the array explicitly
+
       const highResUrl = `https:${coverRes.data[0].url.replace('t_thumb', 't_cover_big')}`;
 
-      const imgStream = await axios({
+      // Download the image as an arraybuffer instead of a streaming pipe to ensure compatibility
+      const imgResponse = await axios({
         method: 'get',
         url: highResUrl,
-        responseType: 'stream',
+        responseType: 'arraybuffer',
         headers: {
           'User-Agent': 'Planka-IGDB-CustomFork/1.0',
         },
       });
+
+      const bufferData = Buffer.from(imgResponse.data);
 
       const attachment = await sails.helpers.attachments.createOne.with({
         project: inputs.project,
@@ -96,7 +98,8 @@ module.exports = {
         creatorUser: inputs.creatorUser,
       });
 
-      await sails.helpers.attachments.uploadStream(imgStream.data, attachment);
+      // Pass the fully compiled image buffer straight to Planka's uploader
+      await sails.helpers.attachments.uploadStream(bufferData, attachment);
 
       const updatedCard = await Card.updateOne({ id: inputs.card.id }).set({
         coverAttachmentId: attachment.id,
