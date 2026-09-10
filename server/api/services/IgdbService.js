@@ -53,7 +53,7 @@ module.exports = {
           const imageResponse = await axios.get(coverUrl, { responseType: 'stream' });
 
           // Correct Planka native attachment creator
-          const attachment = await CardAttachment.create({
+          const attachment = await Attachment.create({
             cardId,
             filename: `${game.name || 'cover'}.jpg`,
           }).fetch();
