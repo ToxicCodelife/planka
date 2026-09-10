@@ -102,9 +102,9 @@
  *       422:
  *         $ref: '#/components/responses/UnprocessableEntity'
  */
-
 const { isDueDate, isStopwatch } = require('../../../utils/validators');
 const { idInput } = require('../../../utils/inputs');
+const IgdbService = require('../../services/IgdbService');
 
 const Errors = {
   NOT_ENOUGH_RIGHTS: {
@@ -201,6 +201,7 @@ module.exports = {
       'stopwatch',
     ]);
 
+    // 1. Natively create the card inside Planka's system
     const card = await sails.helpers.cards.createOne
       .with({
         project,
@@ -214,6 +215,11 @@ module.exports = {
       })
       .intercept('positionMustBeInValues', () => Errors.POSITION_MUST_BE_PRESENT);
 
+    // 2. Fire off the IGDB process in the background
+    // NOTICE: No 'await' keyword here. It safely runs on a side-thread.
+    IgdbService.fetchAndAttachCover(card.id, card.name);
+
+    // 3. Hand the successful object back to the UI instantly to stop the flash glitch
     return {
       item: card,
     };

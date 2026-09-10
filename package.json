@@ -38,6 +38,7 @@
     ]
   },
   "dependencies": {
+    "axios": "^1.20.0",
     "concurrently": "^10.0.4",
     "genversion": "^3.2.0",
     "husky": "^9.1.7",
