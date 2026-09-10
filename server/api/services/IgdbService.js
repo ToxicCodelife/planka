@@ -1,6 +1,8 @@
 /* eslint-disable no-console */
-/* eslint-disable import/no-extraneous-dependencies */
+// eslint-disable-next-line import/no-extraneous-dependencies
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
   async fetchAndAttachCover(cardId, cardTitle) {
@@ -19,14 +21,14 @@ module.exports = {
 
       // 2. Authenticate with Twitch using local variables
       const auth = await axios.post(
-        `https://id.twitch.tv/oauth2/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
+        `https://twitch.tv{clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
       );
 
       const token = auth.data.access_token;
 
       // 3. Query IGDB for the game matching the card title
       const response = await axios({
-        url: 'https://api.igdb.com/v4/games',
+        url: 'https://igdb.com',
         method: 'POST',
         headers: {
           'Client-ID': clientId,
@@ -49,22 +51,24 @@ module.exports = {
             : game.cover.url;
           coverUrl = coverUrl.replace('t_thumb', 't_cover_big');
 
-          // 5. Download and Attach to Planka
-          // Download image buffer from IGDB
+          // 5. Download and Attach to Planka using Native File System Modules
           const imageResponse = await axios.get(coverUrl, { responseType: 'arraybuffer' });
           const buffer = Buffer.from(imageResponse.data, 'binary');
 
-          // Retrieve Planka's active disk/S3 storage receiver layout
-          const receiver = sails.getReceiver('attachments');
-
-          // Generate a safe unique file path key matching Planka's naming format
           const filename = `${game.name || 'cover'}.jpg`;
-          const fieldName = `attachment-${cardId}-${Date.now()}`;
+          const uniqueFilename = `${Date.now()}-${filename}`;
 
-          // Allocate an explicit stream descriptor to pass data safely into the receiver
-          const stream = receiver.allocateStream(fieldName);
-          stream.write(buffer);
-          stream.end();
+          // Define target path local to Planka execution context
+          const uploadDir = path.join(process.cwd(), 'private/attachments');
+
+          // Confirm or create target folder structure
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+
+          // Commit binary stream payload directly to host storage layer
+          const fullFilePath = path.join(uploadDir, uniqueFilename);
+          fs.writeFileSync(fullFilePath, buffer);
 
           // Construct the database entry referencing the generated physical file path
           const attachment = await Attachment.create({
@@ -72,14 +76,17 @@ module.exports = {
             type: 'file',
             name: game.name || 'Cover',
             filename,
-            dirname: receiver.dirname || 'uploads/attachments', // Default fallback directory layout
+            dirname: 'private/attachments',
             extra: {
-              path: stream.extra.path,
+              path: uniqueFilename,
               size: buffer.length,
             },
           }).fetch();
 
-          // Broadcast the change instantly to your friends' screens via WebSockets
+          // 6. Force the card to display this brand new attachment as its front cover art
+          await Card.updateOne({ id: cardId }).set({ coverAttachmentId: attachment.id });
+
+          // 7. Broadcast the change instantly to your friends' screens via WebSockets
           Card.publish([cardId], {
             verb: 'updated',
             id: cardId,
