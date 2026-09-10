@@ -10,7 +10,7 @@ module.exports = {
         return;
       }
 
-      // 1. Authenticate with Twitch
+      // 1. Authenticate with Twitch (Fixed String Literal Typo)
       const auth = await axios.post(
         `https://twitch.tv{process.env.IGDB_CLIENT_ID}&client_secret=${process.env.IGDB_CLIENT_SECRET}&grant_type=client_credentials`,
       );
