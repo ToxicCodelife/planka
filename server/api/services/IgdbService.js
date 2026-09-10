@@ -63,7 +63,10 @@ module.exports = {
         console.log(`No matching game found on IGDB for: ${cardTitle}`);
       }
     } catch (err) {
-      console.error('Background IGDB processing failed safely:', err.message);
+      console.error(
+        'Background IGDB processing failed safely:',
+        err.response ? JSON.stringify(err.response.data) : err.message,
+      );
     }
   },
 };
