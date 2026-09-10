@@ -55,6 +55,7 @@ module.exports = {
           // Correct Planka native attachment creator
           const attachment = await Attachment.create({
             cardId,
+            type: 'file',
             filename: `${game.name || 'cover'}.jpg`,
           }).fetch();
 
