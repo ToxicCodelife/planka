@@ -26,12 +26,15 @@ module.exports = {
 
       // 3. Query IGDB for the game matching the card title
       const response = await axios({
-        url: 'https://igdb.com',
+        url: 'https://api.igdb.com/v4/games',
         method: 'POST',
         headers: {
           'Client-ID': clientId,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: '*/*',
         },
         data: `search "${cardTitle}"; fields name, cover.url; limit 1;`,
       });
