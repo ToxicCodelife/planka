@@ -54,7 +54,7 @@ module.exports = {
           const attachment = await Attachment.create({
             cardId,
             type: 'file',
-            name: game.name || 'Cover', // Added as requested
+            name: game.name || 'Cover', // Manually added row
             filename: `${game.name || 'cover'}.jpg`,
             data: {},
           }).fetch();
@@ -63,8 +63,8 @@ module.exports = {
           const imageResponse = await axios.get(coverUrl, { responseType: 'arraybuffer' });
           const buffer = Buffer.from(imageResponse.data, 'binary');
 
-          // Process the raw buffer directly using Planka's native image asset manager
-          await sails.helpers.images.upload(attachment.id, buffer);
+          // Process the raw buffer directly using Planka's core attachment helper
+          await sails.helpers.attachments.uploadOne(attachment.id, buffer);
 
           // Force the card to display this brand new attachment as its front cover art
           await Card.updateOne({ id: cardId }).set({ coverAttachmentId: attachment.id });
