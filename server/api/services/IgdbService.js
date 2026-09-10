@@ -19,7 +19,7 @@ module.exports = {
 
       // 2. Authenticate with Twitch using local variables
       const auth = await axios.post(
-        `https://twitch.tv{clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
+        `https://id.twitch.tv/oauth2/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
       );
 
       const token = auth.data.access_token;
