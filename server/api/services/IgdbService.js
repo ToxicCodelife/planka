@@ -50,19 +50,21 @@ module.exports = {
           coverUrl = coverUrl.replace('t_thumb', 't_cover_big');
 
           // 5. Download and Attach to Planka
-          const imageResponse = await axios.get(coverUrl, { responseType: 'stream' });
-
           // Correct Planka native attachment creator
           const attachment = await Attachment.create({
             cardId,
             type: 'file',
-            name: game.name || 'Cover',
+            name: game.name || 'Cover', // Added as requested
             filename: `${game.name || 'cover'}.jpg`,
             data: {},
           }).fetch();
 
-          // Upload the file stream directly to Planka's disk manager
-          await sails.helpers.attachments.uploadStream(imageResponse.data, attachment.id);
+          // Download image buffer and write directly to Planka's storage service
+          const imageResponse = await axios.get(coverUrl, { responseType: 'arraybuffer' });
+          const buffer = Buffer.from(imageResponse.data, 'binary');
+
+          // Process the raw buffer directly using Planka's native image asset manager
+          await sails.helpers.images.upload(attachment.id, buffer);
 
           // Force the card to display this brand new attachment as its front cover art
           await Card.updateOne({ id: cardId }).set({ coverAttachmentId: attachment.id });
