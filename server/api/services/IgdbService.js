@@ -4,31 +4,39 @@ const axios = require('axios');
 
 module.exports = {
   async fetchAndAttachCover(cardId, cardTitle) {
+    // 1. Gather variables inside the function block safely
+    const clientId =
+      process.env.IGDB_CLIENT_ID || (sails.config.custom ? sails.config.custom.igdbClientId : null);
+    const clientSecret =
+      process.env.IGDB_CLIENT_SECRET ||
+      (sails.config.custom ? sails.config.custom.igdbClientSecret : null);
+
     try {
-      if (!process.env.IGDB_CLIENT_ID || !process.env.IGDB_CLIENT_SECRET) {
-        console.warn('IGDB credentials missing in Docker variables.');
+      if (!clientId || !clientSecret) {
+        console.warn('IGDB credentials missing.');
         return;
       }
 
-      // 1. Authenticate with Twitch
+      // 2. Authenticate with Twitch using local variables
       const auth = await axios.post(
-        `https://id.twitch.tv/oauth2/token?client_id=${process.env.IGDB_CLIENT_ID}&client_secret=${process.env.IGDB_CLIENT_SECRET}&grant_type=client_credentials`,
+        `https://twitch.tv{clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
       );
 
       const token = auth.data.access_token;
-      // 2. Query IGDB for the game matching the card title
+
+      // 3. Query IGDB for the game matching the card title
       const response = await axios({
         url: 'https://igdb.com',
         method: 'POST',
         headers: {
-          'Client-ID': process.env.IGDB_CLIENT_ID,
+          'Client-ID': clientId,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
         },
         data: `search "${cardTitle}"; fields name, cover.url; limit 1;`,
       });
 
-      // 3. Process image if game is found
+      // 4. Process image if game is found
       if (response.data && response.data.length > 0) {
         const game = response.data[0];
         if (game.cover && game.cover.url) {
@@ -38,7 +46,7 @@ module.exports = {
             : game.cover.url;
           coverUrl = coverUrl.replace('t_thumb', 't_cover_big');
 
-          // 4. Download and Attach to Planka
+          // 5. Download and Attach to Planka
           const imageResponse = await axios.get(coverUrl, { responseType: 'stream' });
 
           await sails.helpers.cards.createOneAttachment.with({
