@@ -50,24 +50,34 @@ module.exports = {
           coverUrl = coverUrl.replace('t_thumb', 't_cover_big');
 
           // 5. Download and Attach to Planka
-          // Correct Planka native attachment creator
-          const attachment = await Attachment.create({
-            cardId,
-            type: 'file',
-            name: game.name || 'Cover', // Manually added row
-            filename: `${game.name || 'cover'}.jpg`,
-            data: {},
-          }).fetch();
-
-          // Download image buffer and write directly to Planka's storage service
+          // Download image buffer from IGDB
           const imageResponse = await axios.get(coverUrl, { responseType: 'arraybuffer' });
           const buffer = Buffer.from(imageResponse.data, 'binary');
 
-          // Process the raw buffer directly using Planka's core attachment helper
-          await sails.helpers.attachments.uploadOne(attachment.id, buffer);
+          // Retrieve Planka's active disk/S3 storage receiver layout
+          const receiver = sails.getReceiver('attachments');
 
-          // Force the card to display this brand new attachment as its front cover art
-          await Card.updateOne({ id: cardId }).set({ coverAttachmentId: attachment.id });
+          // Generate a safe unique file path key matching Planka's naming format
+          const filename = `${game.name || 'cover'}.jpg`;
+          const fieldName = `attachment-${cardId}-${Date.now()}`;
+
+          // Allocate an explicit stream descriptor to pass data safely into the receiver
+          const stream = receiver.allocateStream(fieldName);
+          stream.write(buffer);
+          stream.end();
+
+          // Construct the database entry referencing the generated physical file path
+          const attachment = await Attachment.create({
+            cardId,
+            type: 'file',
+            name: game.name || 'Cover',
+            filename,
+            dirname: receiver.dirname || 'uploads/attachments', // Default fallback directory layout
+            extra: {
+              path: stream.extra.path,
+              size: buffer.length,
+            },
+          }).fetch();
 
           // Broadcast the change instantly to your friends' screens via WebSockets
           Card.publish([cardId], {
