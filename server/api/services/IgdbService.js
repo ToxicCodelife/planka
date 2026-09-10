@@ -52,10 +52,23 @@ module.exports = {
           // 5. Download and Attach to Planka
           const imageResponse = await axios.get(coverUrl, { responseType: 'stream' });
 
-          await sails.helpers.cards.createOneAttachment.with({
+          // Correct Planka native attachment creator
+          const attachment = await CardAttachment.create({
             cardId,
-            file: imageResponse.data,
             filename: `${game.name || 'cover'}.jpg`,
+          }).fetch();
+
+          // Upload the file stream directly to Planka's disk manager
+          await sails.helpers.attachments.uploadStream(imageResponse.data, attachment.id);
+
+          // Force the card to display this brand new attachment as its front cover art
+          await Card.updateOne({ id: cardId }).set({ coverAttachmentId: attachment.id });
+
+          // Broadcast the change instantly to your friends' screens via WebSockets
+          Card.publish([cardId], {
+            verb: 'updated',
+            id: cardId,
+            data: { coverAttachmentId: attachment.id },
           });
 
           console.log(`Successfully attached IGDB cover for: ${cardTitle}`);
