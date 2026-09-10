@@ -6,7 +6,6 @@ const path = require('path');
 
 module.exports = {
   async fetchAndAttachCover(cardId, cardTitle) {
-    // 1. Gather variables inside the function block safely
     const clientId =
       process.env.IGDB_CLIENT_ID || (sails.config.custom ? sails.config.custom.igdbClientId : null);
     const clientSecret =
@@ -19,14 +18,14 @@ module.exports = {
         return;
       }
 
-      // 2. Authenticate with Twitch using local variables
+      // 1. Authenticate with Twitch
       const auth = await axios.post(
-        `https://twitch.tv{clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
+        `https://id.twitch.tv/oauth2/token?client_id=${clientId}&client_secret=${clientSecret}&grant_type=client_credentials`,
       );
 
       const token = auth.data.access_token;
 
-      // 3. Query IGDB for the game matching the card title
+      // 2. Query IGDB for the game matching the card title
       const response = await axios({
         url: 'https://igdb.com',
         method: 'POST',
@@ -41,32 +40,29 @@ module.exports = {
         data: `search "${cardTitle}"; fields name, cover.url; limit 1;`,
       });
 
-      // 4. Process image if game is found
+      // 3. Process image if game is found
       if (response.data && response.data.length > 0) {
         const game = response.data[0];
         if (game.cover && game.cover.url) {
-          // Clean up the protocol relative URL structure
           let coverUrl = game.cover.url.startsWith('//')
             ? `https:${game.cover.url}`
             : game.cover.url;
           coverUrl = coverUrl.replace('t_thumb', 't_cover_big');
 
-          // 5. Download and Attach to Planka using Native File System Modules
+          // 4. Download and Attach to Planka using Native File System Modules
           const imageResponse = await axios.get(coverUrl, { responseType: 'arraybuffer' });
           const buffer = Buffer.from(imageResponse.data, 'binary');
 
-          const filename = `${game.name || 'cover'}.jpg`;
+          const safeGameName = (game.name || 'cover').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+          const filename = `${safeGameName}.jpg`;
           const uniqueFilename = `${Date.now()}-${filename}`;
 
-          // Define target path local to Planka execution context
           const uploadDir = path.join(process.cwd(), 'private/attachments');
 
-          // Confirm or create target folder structure
           if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
           }
 
-          // Commit binary stream payload directly to host storage layer
           const fullFilePath = path.join(uploadDir, uniqueFilename);
           fs.writeFileSync(fullFilePath, buffer);
 
@@ -83,10 +79,10 @@ module.exports = {
             },
           }).fetch();
 
-          // 6. Force the card to display this brand new attachment as its front cover art
+          // 5. Force the card to display this brand new attachment as its front cover art
           await Card.updateOne({ id: cardId }).set({ coverAttachmentId: attachment.id });
 
-          // 7. Broadcast the change instantly to your friends' screens via WebSockets
+          // 6. Broadcast the change instantly to your friends' screens via WebSockets
           Card.publish([cardId], {
             verb: 'updated',
             id: cardId,
