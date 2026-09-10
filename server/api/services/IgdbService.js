@@ -57,6 +57,7 @@ module.exports = {
             cardId,
             type: 'file',
             filename: `${game.name || 'cover'}.jpg`,
+            data: {},
           }).fetch();
 
           // Upload the file stream directly to Planka's disk manager
