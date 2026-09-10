@@ -56,6 +56,7 @@ module.exports = {
           const attachment = await Attachment.create({
             cardId,
             type: 'file',
+            name: game.name || 'Cover',
             filename: `${game.name || 'cover'}.jpg`,
             data: {},
           }).fetch();
