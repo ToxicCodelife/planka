@@ -10,14 +10,13 @@ module.exports = {
         return;
       }
 
-      // 1. Authenticate with Twitch (FIXED ENDPOINT & MISSING $)
+      // 1. Authenticate with Twitch
       const auth = await axios.post(
-        `https://twitch.tv{process.env.IGDB_CLIENT_ID}&client_secret=${process.env.IGDB_CLIENT_SECRET}&grant_type=client_credentials`,
+        `https://id.twitch.tv/oauth2/token?client_id=${process.env.IGDB_CLIENT_ID}&client_secret=${process.env.IGDB_CLIENT_SECRET}&grant_type=client_credentials`,
       );
 
       const token = auth.data.access_token;
-
-      // 2. Query IGDB for the game matching the card title (FIXED ENDPOINT)
+      // 2. Query IGDB for the game matching the card title
       const response = await axios({
         url: 'https://igdb.com',
         method: 'POST',
