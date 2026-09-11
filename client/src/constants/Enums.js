@@ -91,6 +91,12 @@ export const ListSortFieldNames = {
   CREATED_AT: 'createdAt',
 };
 
+export const FilterModes = {
+  ANY: 'any',
+  AND: 'and',
+  ONLY: 'only',
+};
+
 export const CardTypes = {
   PROJECT: 'project',
   STORY: 'story',
