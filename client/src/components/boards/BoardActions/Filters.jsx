@@ -16,6 +16,7 @@ import { Input } from '../../../lib/custom-ui';
 import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import { useNestedRef } from '../../../hooks';
+import { FilterModes, ListSortFieldNames } from '../../../constants/Enums';
 import UserAvatar from '../../users/UserAvatar';
 import BoardMembershipsStep from '../../board-memberships/BoardMembershipsStep';
 import LabelChip from '../../labels/LabelChip';
@@ -23,11 +24,20 @@ import LabelsStep from '../../labels/LabelsStep';
 
 import styles from './Filters.module.scss';
 
+const FILTER_MODE_ORDER = [FilterModes.ANY, FilterModes.AND, FilterModes.ONLY];
+
+const FILTER_MODE_ICON = {
+  [FilterModes.ANY]: 'circle outline',
+  [FilterModes.AND]: 'add circle',
+  [FilterModes.ONLY]: 'dot circle outline',
+};
+
 const Filters = React.memo(() => {
   const board = useSelector(selectors.selectCurrentBoard);
   const userIds = useSelector(selectors.selectFilterUserIdsForCurrentBoard);
   const labelIds = useSelector(selectors.selectFilterLabelIdsForCurrentBoard);
   const currentUserId = useSelector(selectors.selectCurrentUserId);
+  const kanbanListIds = useSelector(selectors.selectKanbanListIdsForCurrentBoard);
 
   const withCurrentUserSelector = useSelector(
     (state) => !!selectors.selectCurrentUserMembershipForCurrentBoard(state),
@@ -108,6 +118,19 @@ const Filters = React.memo(() => {
     },
     [dispatch],
   );
+
+  const handleFilterModeClick = useCallback(() => {
+    const currentIndex = FILTER_MODE_ORDER.indexOf(board.filterMode);
+    const nextMode = FILTER_MODE_ORDER[(currentIndex + 1) % FILTER_MODE_ORDER.length];
+
+    dispatch(entryActions.updateFilterModeInCurrentBoard(nextMode));
+  }, [board.filterMode, dispatch]);
+
+  const handleSortAllListsClick = useCallback(() => {
+    kanbanListIds.forEach((listId) => {
+      dispatch(entryActions.sortList(listId, { fieldName: ListSortFieldNames.NAME }));
+    });
+  }, [kanbanListIds, dispatch]);
 
   const handleSearchChange = useCallback(
     (_, { value }) => {
@@ -191,6 +214,36 @@ const Filters = React.memo(() => {
             <LabelChip id={labelId} size="small" onClick={handleLabelClick} />
           </span>
         ))}
+      </span>
+      <span className={styles.filter}>
+        <button
+          type="button"
+          className={styles.filterButton}
+          title={t('common.filterMode', {
+            defaultValue: 'Filter mode',
+          })}
+          onClick={handleFilterModeClick}
+        >
+          <Icon fitted name={FILTER_MODE_ICON[board.filterMode]} className={styles.filterLabelIcon} />
+          <span className={styles.filterTitle}>
+            {t(`common.filterMode${board.filterMode}`, {
+              defaultValue: board.filterMode.toUpperCase(),
+            })}
+          </span>
+        </button>
+      </span>
+      <span className={styles.filter}>
+        <button
+          type="button"
+          className={styles.filterButton}
+          title={t('common.sortAllListsAlphabetically', {
+            defaultValue: 'Sort all lists A-Z',
+          })}
+          onClick={handleSortAllListsClick}
+        >
+          <Icon fitted name="sort alphabet down" className={styles.filterLabelIcon} />
+          <span className={styles.filterTitle}>A-Z</span>
+        </button>
       </span>
       <span className={styles.filter}>
         <Input
