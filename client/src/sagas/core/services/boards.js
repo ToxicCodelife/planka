@@ -268,5 +268,5 @@ export default {
   searchInCurrentBoard,
   deleteBoard,
   handleBoardDelete,
-  updateFilterModeInBoard,
+  updateFilterModeInCurrentBoard,
 };
