@@ -92,19 +92,17 @@ module.exports = {
       //    storage, and generating thumbnails via sharp — identical to a native upload.
       const data = await sails.helpers.attachments.processUploadedFile(fakeFile);
 
-      const card = await Card.findOne({ id: cardId }).populate('list').populate('board');
+      const { card, list, board, project } = await sails.helpers.cards.getPathToProjectById(cardId);
       if (!card) {
         console.warn(`Card ${cardId} not found when attaching IGDB cover; aborting.`);
         return;
       }
 
-      const project = await Project.findOne({ id: card.board.projectId });
-
       // 7. Create the attachment through the real helper (handles broadcast + webhooks + cover-setting)
       const attachment = await sails.helpers.attachments.createOne.with({
         project,
-        board: card.board,
-        list: card.list,
+        board,
+        list,
         values: {
           type: Attachment.Types.FILE,
           name: game.name || 'Cover',
