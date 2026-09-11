@@ -104,7 +104,6 @@
  */
 const { isDueDate, isStopwatch } = require('../../../utils/validators');
 const { idInput } = require('../../../utils/inputs');
-const IgdbService = require('../../services/IgdbService');
 
 const Errors = {
   NOT_ENOUGH_RIGHTS: {

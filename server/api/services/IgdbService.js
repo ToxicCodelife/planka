@@ -14,7 +14,7 @@ module.exports = {
 
     try {
       if (!clientId || !clientSecret) {
-        console.warn('IGDB credentials missing.');
+        console.warn('IGDB credentials missing in environment variables.');
         return;
       }
 
@@ -25,7 +25,7 @@ module.exports = {
 
       const token = auth.data.access_token;
 
-      // 2. Query IGDB for the game matching the card title
+      // 2. Query IGDB Endpoint with correct v4 route
       const response = await axios({
         url: 'https://igdb.com',
         method: 'POST',
@@ -33,9 +33,6 @@ module.exports = {
           'Client-ID': clientId,
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          Accept: '*/*',
         },
         data: `search "${cardTitle}"; fields name, cover.url; limit 1;`,
       });
@@ -47,9 +44,11 @@ module.exports = {
           let coverUrl = game.cover.url.startsWith('//')
             ? `https:${game.cover.url}`
             : game.cover.url;
+
+          // Upgrade thumbnail to large cover size
           coverUrl = coverUrl.replace('t_thumb', 't_cover_big');
 
-          // 4. Download and Attach to Planka using Native File System Modules
+          // 4. Download image buffer
           const imageResponse = await axios.get(coverUrl, { responseType: 'arraybuffer' });
           const buffer = Buffer.from(imageResponse.data, 'binary');
 
@@ -57,6 +56,7 @@ module.exports = {
           const filename = `${safeGameName}.jpg`;
           const uniqueFilename = `${Date.now()}-${filename}`;
 
+          // Save directly to the Planka attachments directory
           const uploadDir = path.join(process.cwd(), 'private/attachments');
 
           if (!fs.existsSync(uploadDir)) {
@@ -66,7 +66,7 @@ module.exports = {
           const fullFilePath = path.join(uploadDir, uniqueFilename);
           fs.writeFileSync(fullFilePath, buffer);
 
-          // Construct the database entry referencing the generated physical file path
+          // Create the attachment row in PostgreSQL
           const attachment = await Attachment.create({
             cardId,
             type: 'file',
@@ -79,15 +79,19 @@ module.exports = {
             },
           }).fetch();
 
-          // 5. Force the card to display this brand new attachment as its front cover art
-          await Card.updateOne({ id: cardId }).set({ coverAttachmentId: attachment.id });
-
-          // 6. Broadcast the change instantly to your friends' screens via WebSockets
-          Card.publish([cardId], {
-            verb: 'updated',
-            id: cardId,
-            data: { coverAttachmentId: attachment.id },
+          // 5. Explicitly update the card's front cover image ID
+          const updatedCard = await Card.updateOne({ id: cardId }).set({
+            coverAttachmentId: attachment.id,
           });
+
+          // 6. Safely broadcast full update payload structures to active users
+          if (updatedCard) {
+            Card.publish([cardId], {
+              verb: 'updated',
+              id: cardId,
+              data: updatedCard,
+            });
+          }
 
           console.log(`Successfully attached IGDB cover for: ${cardTitle}`);
         } else {
