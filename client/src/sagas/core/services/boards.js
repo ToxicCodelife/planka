@@ -215,6 +215,13 @@ export function* searchInCurrentBoard(value) {
   yield put(actions.searchInBoard(boardId, value, currentListId));
 }
 
+export function* updateFilterModeInCurrentBoard(value) {
+  const { boardId } = yield select(selectors.selectPath);
+  const currentListId = yield select(selectors.selectCurrentListId);
+
+  yield put(actions.updateFilterModeInBoard(boardId, value, currentListId));
+}
+
 export function* deleteBoard(id) {
   const currentBoard = yield select(selectors.selectCurrentBoard);
 
@@ -261,4 +268,5 @@ export default {
   searchInCurrentBoard,
   deleteBoard,
   handleBoardDelete,
+  updateFilterModeInBoard,
 };
