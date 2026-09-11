@@ -7,10 +7,11 @@ import { attr, fk, many } from 'redux-orm';
 
 import BaseModel from './BaseModel';
 import buildSearchParts from '../utils/build-search-parts';
+import matchesIdsByMode from '../utils/filter-cards';
 import { isListKanban } from '../utils/record-helpers';
 import ActionTypes from '../constants/ActionTypes';
 import Config from '../constants/Config';
-import { BoardContexts, BoardViews } from '../constants/Enums';
+import { BoardContexts, BoardViews, FilterModes } from '../constants/Enums';
 
 const prepareFetchedBoard = (board) => ({
   ...board,
@@ -18,6 +19,7 @@ const prepareFetchedBoard = (board) => ({
   context: BoardContexts.BOARD,
   view: board.defaultView,
   search: '',
+  filterMode: FilterModes.ANY,
 });
 
 export default class extends BaseModel {
@@ -36,6 +38,9 @@ export default class extends BaseModel {
     context: attr(),
     view: attr(),
     search: attr(),
+    filterMode: attr({
+      getDefault: () => FilterModes.ANY,
+    }),
     isSubscribed: attr({
       getDefault: () => false,
     }),
@@ -232,6 +237,12 @@ export default class extends BaseModel {
         });
 
         break;
+      case ActionTypes.FILTER_MODE_IN_BOARD_UPDATE:
+        Board.withId(payload.id).update({
+          filterMode: payload.value,
+        });
+
+        break;
       case ActionTypes.BOARD_DELETE:
         Board.withId(payload.id).deleteWithRelated();
 
@@ -363,20 +374,21 @@ export default class extends BaseModel {
     if (filterUserIds.length > 0) {
       cardModels = cardModels.filter((cardModel) => {
         const users = cardModel.users.toRefArray();
+        const userIds = users.map((user) => user.id);
 
-        if (users.some((user) => filterUserIds.includes(user.id))) {
-          return true;
-        }
-
-        return cardModel
+        const assigneeIds = cardModel
           .getTaskListsQuerySet()
           .toModelArray()
-          .some((taskListModel) =>
+          .flatMap((taskListModel) =>
             taskListModel
               .getTasksQuerySet()
               .toRefArray()
-              .some((task) => task.assigneeUserId && filterUserIds.includes(task.assigneeUserId)),
+              .flatMap((task) => (task.assigneeUserId ? [task.assigneeUserId] : [])),
           );
+
+        const combinedUserIds = [...new Set([...userIds, ...assigneeIds])];
+
+        return matchesIdsByMode(combinedUserIds, filterUserIds, this.filterMode);
       });
     }
 
@@ -384,8 +396,8 @@ export default class extends BaseModel {
 
     if (filterLabelIds.length > 0) {
       cardModels = cardModels.filter((cardModel) => {
-        const labels = cardModel.labels.toRefArray();
-        return labels.some((label) => filterLabelIds.includes(label.id));
+        const labelIds = cardModel.labels.toRefArray().map((label) => label.id);
+        return matchesIdsByMode(labelIds, filterLabelIds, this.filterMode);
       });
     }
 
