@@ -27,7 +27,7 @@ module.exports = {
 
       // 2. Query IGDB Endpoint with correct v4 route
       const response = await axios({
-        url: 'https://api./igdb.com/v4/games',
+        url: 'https://api.igdb.com/v4/games',
         method: 'POST',
         headers: {
           'Client-ID': clientId,
