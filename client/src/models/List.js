@@ -7,6 +7,7 @@ import { attr, fk } from 'redux-orm';
 
 import BaseModel from './BaseModel';
 import buildSearchParts from '../utils/build-search-parts';
+import matchesIdsByMode from '../utils/filter-cards';
 import { isListFinite } from '../utils/record-helpers';
 import ActionTypes from '../constants/ActionTypes';
 import Config from '../constants/Config';
@@ -97,6 +98,7 @@ export default class extends BaseModel {
       case ActionTypes.USER_TO_BOARD_FILTER_ADD:
       case ActionTypes.USER_FROM_BOARD_FILTER_REMOVE:
       case ActionTypes.IN_BOARD_SEARCH:
+      case ActionTypes.FILTER_MODE_IN_BOARD_UPDATE:
       case ActionTypes.LABEL_TO_BOARD_FILTER_ADD:
       case ActionTypes.LABEL_FROM_BOARD_FILTER_REMOVE:
         if (payload.currentListId) {
@@ -361,20 +363,21 @@ export default class extends BaseModel {
     if (filterUserIds.length > 0) {
       cardModels = cardModels.filter((cardModel) => {
         const users = cardModel.users.toRefArray();
+        const userIds = users.map((user) => user.id);
 
-        if (users.some((user) => filterUserIds.includes(user.id))) {
-          return true;
-        }
-
-        return cardModel
+        const assigneeIds = cardModel
           .getTaskListsQuerySet()
           .toModelArray()
-          .some((taskListModel) =>
+          .flatMap((taskListModel) =>
             taskListModel
               .getTasksQuerySet()
               .toRefArray()
-              .some((task) => task.assigneeUserId && filterUserIds.includes(task.assigneeUserId)),
+              .flatMap((task) => (task.assigneeUserId ? [task.assigneeUserId] : [])),
           );
+
+        const combinedUserIds = [...new Set([...userIds, ...assigneeIds])];
+
+        return matchesIdsByMode(combinedUserIds, filterUserIds, this.board.filterMode);
       });
     }
 
@@ -382,8 +385,8 @@ export default class extends BaseModel {
 
     if (filterLabelIds.length > 0) {
       cardModels = cardModels.filter((cardModel) => {
-        const labels = cardModel.labels.toRefArray();
-        return labels.some((label) => filterLabelIds.includes(label.id));
+        const labelIds = cardModel.labels.toRefArray().map((label) => label.id);
+        return matchesIdsByMode(labelIds, filterLabelIds, this.board.filterMode);
       });
     }
 
