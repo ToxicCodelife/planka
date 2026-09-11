@@ -16,7 +16,7 @@ import { Input } from '../../../lib/custom-ui';
 import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import { useNestedRef } from '../../../hooks';
-import { FilterModes, ListSortFieldNames } from '../../../constants/Enums';
+import { FilterModes, ListSortFieldNames, SortOrders } from '../../../constants/Enums';
 import UserAvatar from '../../users/UserAvatar';
 import BoardMembershipsStep from '../../board-memberships/BoardMembershipsStep';
 import LabelChip from '../../labels/LabelChip';
@@ -30,6 +30,28 @@ const FILTER_MODE_ICON = {
   [FilterModes.ANY]: 'circle outline',
   [FilterModes.AND]: 'add circle',
   [FilterModes.ONLY]: 'dot circle outline',
+};
+
+const SortModes = {
+  ALPHABETICAL: 'alphabetical',
+  NEWEST: 'newest',
+};
+
+// Each entry describes what clicking the button DOES, and what the button
+// shows NEXT (so after alphabetizing, the button flips to offer "NEW").
+const SORT_MODE_CONFIG = {
+  [SortModes.ALPHABETICAL]: {
+    sortOptions: { fieldName: ListSortFieldNames.NAME },
+    label: 'A-Z',
+    icon: 'sort alphabet down',
+    nextMode: SortModes.NEWEST,
+  },
+  [SortModes.NEWEST]: {
+    sortOptions: { fieldName: ListSortFieldNames.CREATED_AT, order: SortOrders.DESC },
+    label: 'NEW',
+    icon: 'sort content descending',
+    nextMode: SortModes.ALPHABETICAL,
+  },
 };
 
 const Filters = React.memo(() => {
@@ -47,6 +69,7 @@ const Filters = React.memo(() => {
   const [t] = useTranslation();
   const [search, setSearch] = useState(board.search);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [sortMode, setSortMode] = useState(SortModes.ALPHABETICAL);
 
   const debouncedSearch = useMemo(
     () =>
@@ -127,10 +150,14 @@ const Filters = React.memo(() => {
   }, [board.filterMode, dispatch]);
 
   const handleSortAllListsClick = useCallback(() => {
+    const { sortOptions, nextMode } = SORT_MODE_CONFIG[sortMode];
+
     kanbanListIds.forEach((listId) => {
-      dispatch(entryActions.sortList(listId, { fieldName: ListSortFieldNames.NAME }));
+      dispatch(entryActions.sortList(listId, sortOptions));
     });
-  }, [kanbanListIds, dispatch]);
+
+    setSortMode(nextMode);
+  }, [kanbanListIds, sortMode, dispatch]);
 
   const handleSearchChange = useCallback(
     (_, { value }) => {
@@ -236,13 +263,13 @@ const Filters = React.memo(() => {
         <button
           type="button"
           className={styles.filterButton}
-          title={t('common.sortAllListsAlphabetically', {
-            defaultValue: 'Sort all lists A-Z',
+          title={t('common.sortAllLists', {
+            defaultValue: 'Sort all lists',
           })}
           onClick={handleSortAllListsClick}
         >
-          <Icon fitted name="sort alphabet down" className={styles.filterLabelIcon} />
-          <span className={styles.filterTitle}>A-Z</span>
+          <Icon fitted name={SORT_MODE_CONFIG[sortMode].icon} className={styles.filterLabelIcon} />
+          <span className={styles.filterTitle}>{SORT_MODE_CONFIG[sortMode].label}</span>
         </button>
       </span>
       <span className={styles.filter}>
