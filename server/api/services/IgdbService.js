@@ -29,6 +29,10 @@ module.exports = {
       const token = auth.data.access_token;
 
       // 2. Query IGDB for the best-matching game
+      // Escape backslashes and double quotes so titles like `Tom Clancy's "Ghost Recon"`
+      // don't break out of the Apicalypse string literal.
+      const escapedTitle = cardTitle.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
       const response = await axios({
         url: 'https://api.igdb.com/v4/games',
         method: 'POST',
@@ -37,7 +41,7 @@ module.exports = {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'text/plain',
         },
-        data: `search "${cardTitle}"; fields name, cover.url; limit 1;`,
+        data: `search "${escapedTitle}"; fields name, cover.url; limit 1;`,
       });
 
       if (!response.data || response.data.length === 0) {
