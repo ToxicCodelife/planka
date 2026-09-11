@@ -66,7 +66,7 @@ module.exports = {
       const safeGameName = (game.name || 'cover').replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const filename = `${safeGameName}.jpg`;
 
-      const tempDir = sails.config.custom.uploadsTempPath;
+      const tempDir = sails.config.custom.uploadsTempPath || require('os').tmpdir();
       if (!fs.existsSync(tempDir)) {
         fs.mkdirSync(tempDir, { recursive: true });
       }
