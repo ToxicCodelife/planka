@@ -136,6 +136,15 @@ const searchInBoard = (id, value, currentListId) => ({
   },
 });
 
+const updateFilterModeInBoard = (id, value, currentListId) => ({
+  type: ActionTypes.FILTER_MODE_IN_BOARD_UPDATE,
+  payload: {
+    id,
+    value,
+    currentListId,
+  },
+});
+
 const deleteBoard = (id) => ({
   type: ActionTypes.BOARD_DELETE,
   payload: {
@@ -175,4 +184,5 @@ export default {
   searchInBoard,
   deleteBoard,
   handleBoardDelete,
+  updateFilterModeInBoard,
 };
