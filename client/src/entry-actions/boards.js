@@ -79,6 +79,13 @@ const searchInCurrentBoard = (value) => ({
   },
 });
 
+const updateFilterModeInCurrentBoard = (value) => ({
+  type: EntryActionTypes.FILTER_MODE_IN_CURRENT_BOARD_UPDATE,
+  payload: {
+    value,
+  },
+});
+
 const deleteBoard = (id) => ({
   type: EntryActionTypes.BOARD_DELETE,
   payload: {
@@ -106,4 +113,5 @@ export default {
   searchInCurrentBoard,
   deleteBoard,
   handleBoardDelete,
+  updateFilterModeInCurrentBoard,
 };
