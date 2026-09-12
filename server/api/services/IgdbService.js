@@ -284,10 +284,8 @@ module.exports = {
           });
 
           if (updatedCard) {
-            Card.publish([cardId], {
-              verb: 'updated',
-              id: cardId,
-              data: updatedCard,
+            sails.sockets.broadcast(`board:${board.id}`, 'cardUpdate', {
+              item: updatedCard,
             });
           }
 
