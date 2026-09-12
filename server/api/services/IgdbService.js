@@ -6,9 +6,7 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 // eslint-disable-next-line import/no-extraneous-dependencies
-const { HowLongToBeatService } = require('howlongtobeat'); // npm install howlongtobeat --save
-
-const hltbService = new HowLongToBeatService();
+const howlongtobeat = require('howlongtobeat-api'); // npm install howlongtobeat-api --save
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,10 +88,11 @@ async function fetchIgdbTimeToBeat(gameId, clientId, token) {
 
 async function fetchHowLongToBeatTime(gameName) {
   try {
-    const results = await hltbService.search(gameName);
+    const response = await howlongtobeat.find({ search: gameName });
+    const results = response && response.data;
 
     console.log(
-      `[DEBUG] HowLongToBeat search for "${gameName}" returned ${
+      `[DEBUG] HowLongToBeat (howlongtobeat-api) search for "${gameName}" returned ${
         results ? results.length : 0
       } result(s).`,
     );
@@ -102,16 +101,18 @@ async function fetchHowLongToBeatTime(gameName) {
       return null;
     }
 
-    // The package ranks results by relevance via `similarity` (1 = best match).
-    // Sort defensively rather than assuming search() always returns them pre-sorted.
-    const best = [...results].sort((a, b) => (b.similarity || 0) - (a.similarity || 0))[0];
+    // This package doesn't return a similarity score like the old one did,
+    // so prefer an exact case-insensitive name match; otherwise trust the
+    // API's own result ordering and take the first one.
+    const best =
+      results.find((r) => (r.name || '').toLowerCase() === gameName.toLowerCase()) || results[0];
 
-    console.log(`[DEBUG] HowLongToBeat best match: ${best.name} (similarity ${best.similarity})`);
+    console.log(`[DEBUG] HowLongToBeat best match: ${best.name}`);
 
     return {
       source: 'HowLongToBeat',
       mainHours: best.gameplayMain || null,
-      mainExtraHours: best.gameplayMainExtra || null,
+      mainExtraHours: best.gameplayExtended || null,
       completionistHours: best.gameplayCompletionist || null,
     };
   } catch (err) {
@@ -203,10 +204,24 @@ module.exports = {
         return;
       }
 
+      // Fetch existing attachments/comments once so each section below can
+      // check "have I already done this?" -- makes it safe to re-run this
+      // function on a card that was already processed (e.g. a backfill).
+      const existingAttachments = await Attachment.find({ cardId });
+      const existingComments = await Comment.find({ cardId });
+
+      const hasTrailerAttachment = existingAttachments.some((a) => /trailer/i.test(a.name || ''));
+      const hasCompletionComment = existingComments.some((c) =>
+        /Completion time for/i.test(c.text || ''),
+      );
+
       // -----------------------------------------------------------------
-      // 1. Cover image (unchanged from before)
+      // 1. Cover image -- skip if this card already has one (either from a
+      //    previous run of this service, or one the user set manually).
       // -----------------------------------------------------------------
-      if (game.cover && game.cover.url) {
+      if (card.coverAttachmentId) {
+        console.log(`Card already has a cover set; skipping cover for: ${cardTitle}`);
+      } else if (game.cover && game.cover.url) {
         let coverUrl = game.cover.url.startsWith('//')
           ? `https:${game.cover.url}`
           : game.cover.url;
