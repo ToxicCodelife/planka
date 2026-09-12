@@ -49,7 +49,7 @@ async function fetchIgdbTimeToBeat(gameId, clientId, token) {
 
   try {
     const response = await axios({
-      url: 'https://api.igdb.com/v4/game_time_to_beat',
+      url: 'https://api.igdb.com/v4/game_time_to_beats',
       method: 'POST',
       headers: {
         'Client-ID': clientId,
@@ -118,6 +118,33 @@ async function fetchHowLongToBeatTime(gameName) {
     console.warn('HowLongToBeat lookup failed:', err.stack || err.message);
     return null;
   }
+}
+
+function mergeTimeData(hltbData, igdbData) {
+  if (!hltbData && !igdbData) {
+    return null;
+  }
+
+  const sources = [];
+  if (hltbData) {
+    sources.push('HowLongToBeat');
+  }
+  if (igdbData) {
+    sources.push('IGDB');
+  }
+
+  return {
+    source: sources.join(' + '),
+    // Prefer HLTB's numbers when both have them (generally more granular),
+    // but fall back to IGDB for whichever field HLTB is missing.
+    mainHours: (hltbData && hltbData.mainHours) || (igdbData && igdbData.mainHours) || null,
+    mainExtraHours:
+      (hltbData && hltbData.mainExtraHours) || (igdbData && igdbData.mainExtraHours) || null,
+    completionistHours:
+      (hltbData && hltbData.completionistHours) ||
+      (igdbData && igdbData.completionistHours) ||
+      null,
+  };
 }
 
 function buildCompletionTimeText(timeData, gameName) {
@@ -252,11 +279,9 @@ module.exports = {
         const newDescription = descriptionParts.join('\n\n');
 
         if (newDescription !== card.description) {
-          const updatedCard = await Card.updateOne({ id: cardId })
-            .set({
-              description: newDescription,
-            })
-            .fetch();
+          const updatedCard = await Card.updateOne({ id: cardId }).set({
+            description: newDescription,
+          });
 
           if (updatedCard) {
             Card.publish([cardId], {
@@ -332,17 +357,23 @@ module.exports = {
       }
 
       // -----------------------------------------------------------------
-      // 4. Completion time (IGDB first, HowLongToBeat fallback) -> comment
+      // 4. Completion time: fetch BOTH sources, merge, but only post if
+      //    we actually have a Completionist number from at least one of them.
       // -----------------------------------------------------------------
-      let timeData = await fetchHowLongToBeatTime(game.name || cardTitle);
+      const [hltbData, igdbTimeData] = await Promise.all([
+        fetchHowLongToBeatTime(game.name || cardTitle),
+        fetchIgdbTimeToBeat(game.id, clientId, token),
+      ]);
 
-      if (!timeData) {
-        timeData = await fetchIgdbTimeToBeat(game.id, clientId, token);
-      }
+      const mergedTimeData = mergeTimeData(hltbData, igdbTimeData);
 
-      const completionText = buildCompletionTimeText(timeData, game.name || cardTitle);
+      if (!mergedTimeData || !mergedTimeData.completionistHours) {
+        console.log(
+          `No Completionist time available from either source for: ${cardTitle} -- skipping comment (Completionist time is required).`,
+        );
+      } else {
+        const completionText = buildCompletionTimeText(mergedTimeData, game.name || cardTitle);
 
-      if (completionText) {
         // The comment helper needs the FULL creator user record (it reads
         // .name for notification text and .subscribeToCardWhenCommenting),
         // not just an { id } stub like the attachment helper needed.
@@ -366,8 +397,6 @@ module.exports = {
             `Could not find creator user ${card.creatorUserId} to post completion-time comment.`,
           );
         }
-      } else {
-        console.log(`No completion time found (IGDB or HowLongToBeat) for: ${cardTitle}`);
       }
     } catch (err) {
       console.error(
