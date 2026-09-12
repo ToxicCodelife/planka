@@ -35,13 +35,18 @@ async function searchIgdbGame(cardTitle, clientId, token) {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'text/plain',
     },
-    data: `search "${escapedTitle}"; fields name, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 1;`,
+    data: `search "${escapedTitle}"; fields id, name, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 1;`,
   });
 
   return response.data && response.data[0];
 }
 
 async function fetchIgdbTimeToBeat(gameId, clientId, token) {
+  if (!gameId) {
+    console.warn('IGDB time-to-beat lookup skipped: game.id was missing.');
+    return null;
+  }
+
   try {
     const response = await axios({
       url: 'https://api.igdb.com/v4/game_time_to_beat',
@@ -54,10 +59,15 @@ async function fetchIgdbTimeToBeat(gameId, clientId, token) {
       data: `fields game_id, hastily, normally, completely; where game_id = ${gameId}; limit 1;`,
     });
 
+    console.log(
+      `[DEBUG] IGDB time-to-beat raw response for game ${gameId}:`,
+      JSON.stringify(response.data),
+    );
+
     const entry = response.data && response.data[0];
 
-    // IGDB gives seconds; only useful if it actually has a "normally" value
-    if (!entry || !entry.normally) {
+    // IGDB gives seconds; only useful if it has at least ONE of these values
+    if (!entry || (!entry.normally && !entry.completely && !entry.hastily)) {
       return null;
     }
 
@@ -65,12 +75,15 @@ async function fetchIgdbTimeToBeat(gameId, clientId, token) {
 
     return {
       source: 'IGDB',
-      mainHours: toHours(entry.normally),
+      mainHours: entry.normally ? toHours(entry.normally) : null,
       mainExtraHours: null,
       completionistHours: entry.completely ? toHours(entry.completely) : null,
     };
   } catch (err) {
-    console.warn('IGDB time-to-beat lookup failed:', err.message);
+    console.warn(
+      'IGDB time-to-beat lookup failed:',
+      err.response ? JSON.stringify(err.response.data) : err.message,
+    );
     return null;
   }
 }
@@ -78,6 +91,12 @@ async function fetchIgdbTimeToBeat(gameId, clientId, token) {
 async function fetchHowLongToBeatTime(gameName) {
   try {
     const results = await hltbService.search(gameName);
+
+    console.log(
+      `[DEBUG] HowLongToBeat search for "${gameName}" returned ${
+        results ? results.length : 0
+      } result(s).`,
+    );
 
     if (!results || results.length === 0) {
       return null;
@@ -87,6 +106,8 @@ async function fetchHowLongToBeatTime(gameName) {
     // Sort defensively rather than assuming search() always returns them pre-sorted.
     const best = [...results].sort((a, b) => (b.similarity || 0) - (a.similarity || 0))[0];
 
+    console.log(`[DEBUG] HowLongToBeat best match: ${best.name} (similarity ${best.similarity})`);
+
     return {
       source: 'HowLongToBeat',
       mainHours: best.gameplayMain || null,
@@ -94,7 +115,7 @@ async function fetchHowLongToBeatTime(gameName) {
       completionistHours: best.gameplayCompletionist || null,
     };
   } catch (err) {
-    console.warn('HowLongToBeat lookup failed:', err.message);
+    console.warn('HowLongToBeat lookup failed:', err.stack || err.message);
     return null;
   }
 }
@@ -231,9 +252,11 @@ module.exports = {
         const newDescription = descriptionParts.join('\n\n');
 
         if (newDescription !== card.description) {
-          const updatedCard = await Card.updateOne({ id: cardId }).set({
-            description: newDescription,
-          });
+          const updatedCard = await Card.updateOne({ id: cardId })
+            .set({
+              description: newDescription,
+            })
+            .fetch();
 
           if (updatedCard) {
             Card.publish([cardId], {
@@ -248,33 +271,61 @@ module.exports = {
       }
 
       // -----------------------------------------------------------------
-      // 3. Trailer -> link-type attachment
+      // 3. Trailers -> link-type attachments (release + gameplay, when available)
       // -----------------------------------------------------------------
       const videos = game.videos || [];
-      const trailerVideo = videos.find((v) => /trailer/i.test(v.name || '')) || videos[0];
 
-      if (trailerVideo && trailerVideo.video_id) {
-        const youtubeUrl = `https://www.youtube.com/watch?v=${trailerVideo.video_id}`;
+      const gameplayVideo = videos.find((v) => /gameplay/i.test(v.name || ''));
+      const releaseVideo = videos.find(
+        (v) => /release|launch|announce/i.test(v.name || '') && v !== gameplayVideo,
+      );
 
-        try {
-          const linkData = await sails.helpers.attachments.processLink(youtubeUrl);
+      const videosToAttach = [];
+      if (releaseVideo) {
+        videosToAttach.push({ video: releaseVideo, label: 'Release Trailer' });
+      }
+      if (gameplayVideo) {
+        videosToAttach.push({ video: gameplayVideo, label: 'Gameplay Trailer' });
+      }
 
-          await sails.helpers.attachments.createOne.with({
-            project,
-            board,
-            list,
-            values: {
-              type: Attachment.Types.LINK,
-              name: trailerVideo.name || `${game.name} - Trailer`,
-              data: linkData,
-              card,
-              creatorUser: { id: card.creatorUserId },
-            },
-          });
+      // Neither specific category matched -- fall back to whatever's first,
+      // generically labeled, so we still attach SOMETHING if videos exist.
+      if (videosToAttach.length === 0 && videos.length > 0) {
+        videosToAttach.push({ video: videos[0], label: 'Trailer' });
+      }
 
-          console.log(`Attached trailer link for: ${cardTitle}`);
-        } catch (err) {
-          console.warn('Failed to attach trailer link:', err.message);
+      if (videosToAttach.length > 0) {
+        // eslint-disable-next-line no-restricted-syntax
+        for (const { video, label } of videosToAttach) {
+          if (!video.video_id) {
+            // eslint-disable-next-line no-continue
+            continue;
+          }
+
+          const youtubeUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
+
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            const linkData = await sails.helpers.attachments.processLink(youtubeUrl);
+
+            // eslint-disable-next-line no-await-in-loop
+            await sails.helpers.attachments.createOne.with({
+              project,
+              board,
+              list,
+              values: {
+                type: Attachment.Types.LINK,
+                name: `${game.name || cardTitle} - ${label}`,
+                data: linkData,
+                card,
+                creatorUser: { id: card.creatorUserId },
+              },
+            });
+
+            console.log(`Attached ${label} for: ${cardTitle}`);
+          } catch (err) {
+            console.warn(`Failed to attach ${label}:`, err.message);
+          }
         }
       } else {
         console.log(`No trailer video found on IGDB for: ${cardTitle}`);
@@ -283,10 +334,10 @@ module.exports = {
       // -----------------------------------------------------------------
       // 4. Completion time (IGDB first, HowLongToBeat fallback) -> comment
       // -----------------------------------------------------------------
-      let timeData = await fetchIgdbTimeToBeat(game.id, clientId, token);
+      let timeData = await fetchHowLongToBeatTime(game.name || cardTitle);
 
       if (!timeData) {
-        timeData = await fetchHowLongToBeatTime(game.name || cardTitle);
+        timeData = await fetchIgdbTimeToBeat(game.id, clientId, token);
       }
 
       const completionText = buildCompletionTimeText(timeData, game.name || cardTitle);
