@@ -311,85 +311,92 @@ module.exports = {
       // -----------------------------------------------------------------
       // 3. Trailers -> link-type attachments (release + gameplay, when available)
       // -----------------------------------------------------------------
-      const videos = game.videos || [];
-
-      const gameplayVideo = videos.find((v) => /gameplay/i.test(v.name || ''));
-      const releaseVideo = videos.find(
-        (v) => /release|launch|announce/i.test(v.name || '') && v !== gameplayVideo,
-      );
-
-      const videosToAttach = [];
-      if (releaseVideo) {
-        videosToAttach.push({ video: releaseVideo, label: 'Release Trailer' });
-      }
-      if (gameplayVideo) {
-        videosToAttach.push({ video: gameplayVideo, label: 'Gameplay Trailer' });
-      }
-
-      // Neither specific category matched -- fall back to whatever's first,
-      // generically labeled, so we still attach SOMETHING if videos exist.
-      if (videosToAttach.length === 0 && videos.length > 0) {
-        videosToAttach.push({ video: videos[0], label: 'Trailer' });
-      }
-
-      if (videosToAttach.length > 0) {
-        // eslint-disable-next-line no-restricted-syntax
-        for (const { video, label } of videosToAttach) {
-          if (!video.video_id) {
-            // eslint-disable-next-line no-continue
-            continue;
-          }
-
-          const youtubeUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
-
-          try {
-            // eslint-disable-next-line no-await-in-loop
-            const linkData = await sails.helpers.attachments.processLink(youtubeUrl);
-
-            // eslint-disable-next-line no-await-in-loop
-            await sails.helpers.attachments.createOne.with({
-              project,
-              board,
-              list,
-              values: {
-                type: Attachment.Types.LINK,
-                name: `${game.name || cardTitle} - ${label}`,
-                data: linkData,
-                card,
-                creatorUser: { id: card.creatorUserId },
-              },
-            });
-
-            console.log(`Attached ${label} for: ${cardTitle}`);
-          } catch (err) {
-            console.warn(`Failed to attach ${label}:`, err.message);
-          }
-        }
+      if (hasTrailerAttachment) {
+        console.log(`Card already has a trailer attachment; skipping trailers for: ${cardTitle}`);
       } else {
-        console.log(`No trailer video found on IGDB for: ${cardTitle}`);
+        const videos = game.videos || [];
+
+        const gameplayVideo = videos.find((v) => /gameplay/i.test(v.name || ''));
+        const releaseVideo = videos.find(
+          (v) => /release|launch|announce/i.test(v.name || '') && v !== gameplayVideo,
+        );
+
+        const videosToAttach = [];
+        if (releaseVideo) {
+          videosToAttach.push({ video: releaseVideo, label: 'Release Trailer' });
+        }
+        if (gameplayVideo) {
+          videosToAttach.push({ video: gameplayVideo, label: 'Gameplay Trailer' });
+        }
+
+        // Neither specific category matched -- fall back to whatever's first,
+        // generically labeled, so we still attach SOMETHING if videos exist.
+        if (videosToAttach.length === 0 && videos.length > 0) {
+          videosToAttach.push({ video: videos[0], label: 'Trailer' });
+        }
+
+        if (videosToAttach.length > 0) {
+          // eslint-disable-next-line no-restricted-syntax
+          for (const { video, label } of videosToAttach) {
+            if (!video.video_id) {
+              // eslint-disable-next-line no-continue
+              continue;
+            }
+
+            const youtubeUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
+
+            try {
+              // eslint-disable-next-line no-await-in-loop
+              const linkData = await sails.helpers.attachments.processLink(youtubeUrl);
+
+              // eslint-disable-next-line no-await-in-loop
+              await sails.helpers.attachments.createOne.with({
+                project,
+                board,
+                list,
+                values: {
+                  type: Attachment.Types.LINK,
+                  name: `${game.name || cardTitle} - ${label}`,
+                  data: linkData,
+                  card,
+                  creatorUser: { id: card.creatorUserId },
+                },
+              });
+
+              console.log(`Attached ${label} for: ${cardTitle}`);
+            } catch (err) {
+              console.warn(`Failed to attach ${label}:`, err.message);
+            }
+          }
+        } else {
+          console.log(`No trailer video found on IGDB for: ${cardTitle}`);
+        }
       }
 
       // -----------------------------------------------------------------
       // 4. Completion time: fetch BOTH sources, merge, but only post if
       //    we actually have a Completionist number from at least one of them.
       // -----------------------------------------------------------------
-      const [hltbData, igdbTimeData] = await Promise.all([
-        fetchHowLongToBeatTime(game.name || cardTitle),
-        fetchIgdbTimeToBeat(game.id, clientId, token),
-      ]);
-
-      const mergedTimeData = mergeTimeData(hltbData, igdbTimeData);
-
-      if (!mergedTimeData || !mergedTimeData.completionistHours) {
-        console.log(
-          `No Completionist time available from either source for: ${cardTitle} -- skipping comment (Completionist time is required).`,
-        );
+      if (hasCompletionComment) {
+        console.log(`Card already has a completion-time comment; skipping for: ${cardTitle}`);
       } else {
-        const completionText = buildCompletionTimeText(mergedTimeData, game.name || cardTitle);
+        const [hltbData, igdbTimeData] = await Promise.all([
+          fetchHowLongToBeatTime(game.name || cardTitle),
+          fetchIgdbTimeToBeat(game.id, clientId, token),
+        ]);
 
-        // The comment helper needs the FULL creator user record (it reads
-        // .name for notification text and .subscribeToCardWhenCommenting),
-        // not just an { id } stub like the attachment helper needed.
+        const mergedTimeData = mergeTimeData(hltbData, igdbTimeData);
+
+        if (!mergedTimeData || !mergedTimeData.completionistHours) {
+          console.log(
+            `No Completionist time available from either source for: ${cardTitle} -- skipping comment (Completionist time is required).`,
+          );
+        } else {
+          const completionText = buildCompletionTimeText(mergedTimeData, game.name || cardTitle);
+
+          // The comment helper needs the FULL creator user record (it reads
+          // .name for notification text and .subscribeToCardWhenCommenting),
+          // not just an { id } stub like the attachment helper needed.
         const creatorUser = await User.findOne({ id: card.creatorUserId });
 
         if (creatorUser) {
@@ -410,6 +417,7 @@ module.exports = {
             `Could not find creator user ${card.creatorUserId} to post completion-time comment.`,
           );
         }
+      }
       }
     } catch (err) {
       console.error(
