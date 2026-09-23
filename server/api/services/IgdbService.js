@@ -7,6 +7,18 @@ const path = require('path');
 const crypto = require('crypto');
 // eslint-disable-next-line import/no-extraneous-dependencies
 const howlongtobeat = require('howlongtobeat-api'); // npm install howlongtobeat-api --save
+// eslint-disable-next-line import/no-extraneous-dependencies
+const puppeteerCore = require('puppeteer-core'); // npm install puppeteer-core --save
+// eslint-disable-next-line import/no-extraneous-dependencies
+const { addExtra } = require('puppeteer-extra'); // npm install puppeteer-extra --save
+// eslint-disable-next-line import/no-extraneous-dependencies
+const StealthPlugin = require('puppeteer-extra-plugin-stealth'); // npm install puppeteer-extra-plugin-stealth --save
+
+const puppeteerExtra = addExtra(puppeteerCore);
+puppeteerExtra.use(StealthPlugin());
+
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -265,8 +277,7 @@ async function fetchCoOptimusData(gameName) {
     const response = await axios.get('https://api.co-optimus.com/games.php', {
       params: { search: true, name: gameName },
       headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        'User-Agent': BROWSER_UA,
       },
       timeout: 10000,
     });
@@ -343,6 +354,163 @@ function buildCoOptimusText(data) {
 }
 
 // ---------------------------------------------------------------------------
+// TrueAchievements (Puppeteer + stealth plugin -- see conversation history for
+// why: Cloudflare's interactive managed challenge blocks plain HTTP requests
+// and vanilla headless Chromium alike; the stealth plugin patches enough
+// headless-detection signals to get through).
+// ---------------------------------------------------------------------------
+
+function parseTrueAchievementsFlags(html) {
+  const flagRegex =
+    /<label class="checkboxcaption" for="chkFlag_[^"]*"><i[^>]*><\/i>\s*<b>(\d+)<\/b>\s*([^<]+)<\/label>/g;
+
+  const flags = [];
+  let match = flagRegex.exec(html);
+  while (match !== null) {
+    flags.push({
+      count: parseInt(match[1], 10),
+      name: match[2].trim(),
+    });
+    match = flagRegex.exec(html);
+  }
+
+  if (flags.length === 0) {
+    return null;
+  }
+
+  // Pull out the "xN Players Required" flags specifically -- this is the
+  // literal "how many people do we need" data.
+  const playerReqs = flags
+    .map((f) => {
+      const m = /^x(\d+)\s+Players Required$/i.exec(f.name);
+      return m ? { players: parseInt(m[1], 10), count: f.count } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.players - b.players);
+
+  const cooperative = flags.find((f) => /^cooperative$/i.test(f.name));
+  const versus = flags.find((f) => /^versus$/i.test(f.name));
+
+  return {
+    allFlags: flags,
+    playerRequirements: playerReqs,
+    maxPlayersRequired:
+      playerReqs.length > 0 ? Math.max(...playerReqs.map((p) => p.players)) : null,
+    cooperativeCount: cooperative ? cooperative.count : null,
+    versusCount: versus ? versus.count : null,
+  };
+}
+
+function buildTrueAchievementsText(data, gameName) {
+  if (!data) {
+    return null;
+  }
+
+  const lines = [`**Achievement Flags for ${gameName}** (source: TrueAchievements)`];
+
+  if (data.cooperativeCount) {
+    lines.push(`- Cooperative achievements: ${data.cooperativeCount}`);
+  }
+
+  if (data.versusCount) {
+    lines.push(`- Versus achievements: ${data.versusCount}`);
+  }
+
+  if (data.playerRequirements.length > 0) {
+    const breakdown = data.playerRequirements
+      .map((p) => `${p.count} need ${p.players} players`)
+      .join(', ');
+    lines.push(`- Player requirements: ${breakdown}`);
+    lines.push(`- **Max players needed for any single achievement: ${data.maxPlayersRequired}**`);
+  } else {
+    lines.push('- No explicit "players required" flags found for this game.');
+  }
+
+  return lines.join('\n');
+}
+
+function normalizeForMatch(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+async function fetchTrueAchievementsFlags(gameTitle) {
+  const executablePath =
+    process.env.CHROMIUM_PATH ||
+    (sails.config.custom ? sails.config.custom.chromiumPath : null) ||
+    '/usr/bin/chromium-browser';
+
+  let browser;
+  try {
+    browser = await puppeteerExtra.launch({
+      executablePath,
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent(BROWSER_UA);
+
+    // 1. Search for the game via TrueAchievements' own (non-Google) search page
+    const searchUrl = `https://www.trueachievements.com/searchresults.aspx?search=${encodeURIComponent(
+      gameTitle,
+    )}`;
+    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 25000 });
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const searchHtml = await page.content();
+    const gameLinkRegex = /href="(\/game\/[^"]+)\/achievements"/g;
+    const candidates = new Set();
+    let m = gameLinkRegex.exec(searchHtml);
+    while (m !== null) {
+      candidates.add(m[1]);
+      m = gameLinkRegex.exec(searchHtml);
+    }
+
+    if (candidates.size === 0) {
+      console.log(`[TrueAchievements] No search results found for: ${gameTitle}`);
+      return null;
+    }
+
+    // Prefer an exact normalized match (handles apostrophes/periods/hyphens
+    // differing between our title and TA's slug) over sequels/spinoffs that
+    // also matched the fuzzy site search.
+    const normalizedTitle = normalizeForMatch(gameTitle);
+    let bestSlug = null;
+    // eslint-disable-next-line no-restricted-syntax
+    for (const slug of candidates) {
+      const slugName = slug.replace('/game/', '');
+      if (normalizeForMatch(slugName) === normalizedTitle) {
+        bestSlug = slug;
+        break;
+      }
+    }
+
+    if (!bestSlug) {
+      [bestSlug] = candidates;
+    }
+
+    console.log(`[TrueAchievements] Matched "${gameTitle}" -> ${bestSlug}`);
+
+    // 2. Load the achievements page and extract the Flag Filter panel
+    const achievementsUrl = `https://www.trueachievements.com${bestSlug}/achievements`;
+    await page.goto(achievementsUrl, { waitUntil: 'networkidle2', timeout: 25000 });
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const html = await page.content();
+    return parseTrueAchievementsFlags(html);
+  } catch (err) {
+    console.warn('TrueAchievements lookup failed:', err.message);
+    return null;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -388,6 +556,9 @@ module.exports = {
       );
       const hasCoOptimusComment = existingComments.some((c) =>
         /Co-Op Info for/i.test(c.text || ''),
+      );
+      const hasTrueAchievementsComment = existingComments.some((c) =>
+        /Achievement Flags for/i.test(c.text || ''),
       );
 
       // -----------------------------------------------------------------
@@ -578,34 +749,32 @@ module.exports = {
           // The comment helper needs the FULL creator user record (it reads
           // .name for notification text and .subscribeToCardWhenCommenting),
           // not just an { id } stub like the attachment helper needed.
-        const creatorUser = await User.findOne({ id: card.creatorUserId });
+          const creatorUser = await User.findOne({ id: card.creatorUserId });
 
-        if (creatorUser) {
-          await sails.helpers.comments.createOne.with({
-            project,
-            board,
-            list,
-            values: {
-              text: completionText,
-              card,
-              user: creatorUser,
-            },
-          });
+          if (creatorUser) {
+            await sails.helpers.comments.createOne.with({
+              project,
+              board,
+              list,
+              values: {
+                text: completionText,
+                card,
+                user: creatorUser,
+              },
+            });
 
-          console.log(`Posted completion-time comment for: ${cardTitle}`);
-        } else {
-          console.warn(
-            `Could not find creator user ${card.creatorUserId} to post completion-time comment.`,
-          );
+            console.log(`Posted completion-time comment for: ${cardTitle}`);
+          } else {
+            console.warn(
+              `Could not find creator user ${card.creatorUserId} to post completion-time comment.`,
+            );
+          }
         }
-      }
       }
 
       // -----------------------------------------------------------------
       // 5. Co-Optimus -> its own independent comment. Wrapped in its own
-      //    try/catch so a failure here NEVER blocks anything else (cover,
-      //    description, trailers, completion-time comment all already done
-      //    by this point regardless of what happens below).
+      //    try/catch so a failure here NEVER blocks anything else.
       // -----------------------------------------------------------------
       if (hasCoOptimusComment) {
         console.log(`Card already has a Co-Optimus comment; skipping for: ${cardTitle}`);
@@ -639,10 +808,49 @@ module.exports = {
             console.log(`No Co-Optimus data found for: ${cardTitle}`);
           }
         } catch (err) {
-          console.warn(
-            `Co-Optimus section failed safely for ${cardTitle}:`,
-            err.message,
-          );
+          console.warn(`Co-Optimus section failed safely for ${cardTitle}:`, err.message);
+        }
+      }
+
+      // -----------------------------------------------------------------
+      // 6. TrueAchievements -> its own independent comment. Uses a real
+      //    headless browser (Puppeteer + stealth plugin) since this site's
+      //    achievement list is JS-rendered and Cloudflare-protected. Wrapped
+      //    in its own try/catch so a failure here NEVER blocks anything else.
+      // -----------------------------------------------------------------
+      if (hasTrueAchievementsComment) {
+        console.log(`Card already has a TrueAchievements comment; skipping for: ${cardTitle}`);
+      } else {
+        try {
+          const taData = await fetchTrueAchievementsFlags(game.name || cardTitle);
+          const taText = buildTrueAchievementsText(taData, game.name || cardTitle);
+
+          if (taText) {
+            const creatorUser = await User.findOne({ id: card.creatorUserId });
+
+            if (creatorUser) {
+              await sails.helpers.comments.createOne.with({
+                project,
+                board,
+                list,
+                values: {
+                  text: taText,
+                  card,
+                  user: creatorUser,
+                },
+              });
+
+              console.log(`Posted TrueAchievements comment for: ${cardTitle}`);
+            } else {
+              console.warn(
+                `Could not find creator user ${card.creatorUserId} to post TrueAchievements comment.`,
+              );
+            }
+          } else {
+            console.log(`No TrueAchievements flag data found for: ${cardTitle}`);
+          }
+        } catch (err) {
+          console.warn(`TrueAchievements section failed safely for ${cardTitle}:`, err.message);
         }
       }
     } catch (err) {
