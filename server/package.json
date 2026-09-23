@@ -92,7 +92,9 @@
     "winston": "^3.19.0",
     "zxcvbn": "^4.4.2",
     "howlongtobeat-api": "^1.0.3",
-    "puppeteer-core": "^25.11.0"
+    "puppeteer-core": "^25.11.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
     "chai": "^6.2.2",
