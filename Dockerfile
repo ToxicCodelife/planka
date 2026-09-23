@@ -28,7 +28,7 @@ RUN npm install npm --global \
 FROM node:24-alpine
 
 RUN apk -U upgrade \
-  && apk add bash python3 squid --no-cache
+  && apk add bash python3 squid chromium nss freetype harfbuzz ca-certificates ttf-freefont --no-cache
 
 USER node
 WORKDIR /app
