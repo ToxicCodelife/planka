@@ -273,16 +273,41 @@ function buildMultiplayerText(mpData) {
 }
 
 async function fetchCoOptimusData(gameName) {
+  const executablePath =
+    process.env.CHROMIUM_PATH ||
+    (sails.config.custom ? sails.config.custom.chromiumPath : null) ||
+    '/usr/bin/chromium-browser';
+
+  let browser;
   try {
-    const response = await axios.get('https://api.co-optimus.com/games.php', {
-      params: { search: true, name: gameName },
-      headers: {
-        'User-Agent': BROWSER_UA,
-      },
-      timeout: 10000,
+    // Same fix as TrueAchievements: a plain axios request to this endpoint
+    // gets a flat Cloudflare 403. Routing through the stealth-patched
+    // headless browser (confirmed working against this exact site earlier)
+    // gets past it.
+    browser = await puppeteerExtra.launch({
+      executablePath,
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
 
-    const xml = String(response.data || '');
+    const page = await browser.newPage();
+    await page.setUserAgent(BROWSER_UA);
+
+    const apiUrl = `https://api.co-optimus.com/games.php?search=true&name=${encodeURIComponent(
+      gameName,
+    )}`;
+    await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // NOTE (unverified assumption, flagged rather than silently trusted):
+    // Chromium typically renders a raw XML response body wrapped in a
+    // synthetic <pre> tag when navigated to directly, and innerText should
+    // give us the clean XML text either way. The debug log below shows the
+    // actual captured content, so if this assumption is wrong it'll be
+    // visible immediately rather than silently failing.
+    const xml = await page.evaluate(
+      () => document.body.innerText || document.body.textContent || '',
+    );
 
     console.log(
       `[DEBUG] Co-Optimus raw response for "${gameName}" (first 500 chars):`,
@@ -326,8 +351,12 @@ async function fetchCoOptimusData(gameName) {
       pageUrl: url,
     };
   } catch (err) {
-    console.warn('Co-Optimus lookup failed:', err.response ? err.response.status : err.message);
+    console.warn('Co-Optimus lookup failed:', err.message);
     return null;
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
 }
 
