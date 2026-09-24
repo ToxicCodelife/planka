@@ -296,18 +296,15 @@ async function fetchCoOptimusData(gameName) {
     const apiUrl = `https://api.co-optimus.com/games.php?search=true&name=${encodeURIComponent(
       gameName,
     )}`;
-    await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 20000 });
-    await new Promise((r) => setTimeout(r, 1000));
 
-    // NOTE (unverified assumption, flagged rather than silently trusted):
-    // Chromium typically renders a raw XML response body wrapped in a
-    // synthetic <pre> tag when navigated to directly, and innerText should
-    // give us the clean XML text either way. The debug log below shows the
-    // actual captured content, so if this assumption is wrong it'll be
-    // visible immediately rather than silently failing.
-    const xml = await page.evaluate(
-      () => document.body.innerText || document.body.textContent || '',
-    );
+    // CONFIRMED (not an assumption anymore): Chromium's native XML viewer
+    // renders tags as visual tree UI, NOT as real DOM text -- so reading
+    // document.body.innerText strips every tag, leaving only the values
+    // concatenated together. Reading the raw HTTP response body directly
+    // (via the Response object page.goto() returns) bypasses that entirely
+    // and gives us the exact bytes the server sent.
+    const response = await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+    const xml = await response.text();
 
     console.log(
       `[DEBUG] Co-Optimus raw response for "${gameName}" (first 500 chars):`,
