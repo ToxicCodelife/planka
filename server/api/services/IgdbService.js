@@ -803,40 +803,49 @@ module.exports = {
       //    try/catch so a failure here NEVER blocks anything else.
       // -----------------------------------------------------------------
       if (hasCoOptimusComment) {
-        console.log(`Card already has a Co-Optimus comment; skipping for: ${cardTitle}`);
-      } else {
-        try {
-          const coOptimusData = await fetchCoOptimusData(game.name || cardTitle);
-          const coOptimusText = buildCoOptimusText(coOptimusData);
+  console.log(`Card already has a Co-Optimus comment; skipping for: ${cardTitle}`);
+} else {
+  try {
+    const gameEntry = await CoOptimusIndex.findGameEntry(game.name || cardTitle);
 
-          if (coOptimusText) {
-            const creatorUser = await User.findOne({ id: card.creatorUserId });
+    if (!gameEntry) {
+      console.log(`No Co-Optimus entry found in index for: ${cardTitle}`);
+    } else {
+      const coOpInfo = await CoOptimusService.fetchCoOptimusCoOpInfo(
+        gameEntry.url,
+        game.name || cardTitle,
+      );
+      const coOptimusText = CoOptimusService.buildCoOptimusText(coOpInfo, game.name || cardTitle);
 
-            if (creatorUser) {
-              await sails.helpers.comments.createOne.with({
-                project,
-                board,
-                list,
-                values: {
-                  text: coOptimusText,
-                  card,
-                  user: creatorUser,
-                },
-              });
+      if (coOptimusText) {
+        const creatorUser = await User.findOne({ id: card.creatorUserId });
 
-              console.log(`Posted Co-Optimus comment for: ${cardTitle}`);
-            } else {
-              console.warn(
-                `Could not find creator user ${card.creatorUserId} to post Co-Optimus comment.`,
-              );
-            }
-          } else {
-            console.log(`No Co-Optimus data found for: ${cardTitle}`);
-          }
-        } catch (err) {
-          console.warn(`Co-Optimus section failed safely for ${cardTitle}:`, err.message);
+        if (creatorUser) {
+          await sails.helpers.comments.createOne.with({
+            project,
+            board,
+            list,
+            values: {
+              text: coOptimusText,
+              card,
+              user: creatorUser,
+            },
+          });
+
+          console.log(`Posted Co-Optimus comment for: ${cardTitle}`);
+        } else {
+          console.warn(
+            `Could not find creator user ${card.creatorUserId} to post Co-Optimus comment.`,
+          );
         }
+      } else {
+        console.log(`No Co-Optimus co-op data found for: ${cardTitle}`);
       }
+    }
+  } catch (err) {
+    console.warn(`Co-Optimus section failed safely for ${cardTitle}:`, err.message);
+  }
+}
 
       // -----------------------------------------------------------------
       // 6. TrueAchievements -> its own independent comment. Uses a real
