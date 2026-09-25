@@ -13,6 +13,8 @@ const puppeteerCore = require('puppeteer-core'); // npm install puppeteer-core -
 const { addExtra } = require('puppeteer-extra'); // npm install puppeteer-extra --save
 // eslint-disable-next-line import/no-extraneous-dependencies
 const StealthPlugin = require('puppeteer-extra-plugin-stealth'); // npm install puppeteer-extra-plugin-stealth --save
+const CoOptimusIndex = require('./CoOptimusIndex');
+const CoOptimusService = require('./CoOptimusService');
 
 const puppeteerExtra = addExtra(puppeteerCore);
 puppeteerExtra.use(StealthPlugin());
