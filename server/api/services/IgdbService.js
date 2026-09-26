@@ -82,7 +82,24 @@ async function searchIgdbGame(cardTitle, clientId, token) {
   // break out of the Apicalypse string literal.
   const escapedTitle = cardTitle.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const fieldsClause =
-    'fields id, name, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 1;';
+    'fields id, name, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 10;';
+
+  // IGDB's `search` ranks by its own relevance/popularity, which can put a
+  // well-known franchise with an overlapping word (e.g. "The King of
+  // Fighters XV" for a query of "For The King") ahead of the actual game
+  // typed on the card. Pulling back several candidates and preferring an
+  // exact (normalized) title match fixes that; only fall back to IGDB's own
+  // top-ranked result when nothing matches exactly.
+  const pickBestMatch = (results) => {
+    if (!results || results.length === 0) {
+      return null;
+    }
+
+    const normalizedTitle = normalizeForMatch(cardTitle);
+    const exactMatch = results.find((g) => normalizeForMatch(g.name) === normalizedTitle);
+
+    return exactMatch || results[0];
+  };
 
   const xboxPlatformIds = await getXboxPlatformIds(clientId, token);
 
@@ -100,7 +117,7 @@ async function searchIgdbGame(cardTitle, clientId, token) {
       )}); ${fieldsClause}`,
     });
 
-    const filteredGame = filteredResponse.data && filteredResponse.data[0];
+    const filteredGame = pickBestMatch(filteredResponse.data);
     if (filteredGame) {
       return filteredGame;
     }
@@ -124,7 +141,7 @@ async function searchIgdbGame(cardTitle, clientId, token) {
     data: `search "${escapedTitle}"; ${fieldsClause}`,
   });
 
-  return response.data && response.data[0];
+  return pickBestMatch(response.data);
 }
 
 async function fetchIgdbTimeToBeat(gameId, clientId, token) {
