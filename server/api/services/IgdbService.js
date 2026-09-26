@@ -6,8 +6,6 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 // eslint-disable-next-line import/no-extraneous-dependencies
-const howlongtobeat = require('howlongtobeat-api'); // npm install howlongtobeat-api --save
-// eslint-disable-next-line import/no-extraneous-dependencies
 const puppeteerCore = require('puppeteer-core'); // npm install puppeteer-core --save
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { addExtra } = require('puppeteer-extra'); // npm install puppeteer-extra --save
@@ -15,6 +13,7 @@ const { addExtra } = require('puppeteer-extra'); // npm install puppeteer-extra 
 const StealthPlugin = require('puppeteer-extra-plugin-stealth'); // npm install puppeteer-extra-plugin-stealth --save
 const CoOptimusIndex = require('./CoOptimusIndex');
 const CoOptimusService = require('./CoOptimusService');
+const HowLongToBeatService = require('./HowLongToBeatService');
 
 const puppeteerExtra = addExtra(puppeteerCore);
 puppeteerExtra.use(StealthPlugin());
@@ -161,11 +160,6 @@ async function fetchIgdbMultiplayerModes(gameId, clientId, token) {
     return null;
   }
 }
-
-async function fetchHowLongToBeatTime(gameName) {
-  try {
-    const response = await howlongtobeat.find({ search: gameName });
-    const results = response && response.data;
 
     console.log(
       `[DEBUG] HowLongToBeat (howlongtobeat-api) search for "${gameName}" returned ${
@@ -524,10 +518,24 @@ async function fetchTrueAchievementsFlags(gameTitle) {
     // 2. Load the achievements page and extract the Flag Filter panel
     const achievementsUrl = `https://www.trueachievements.com${bestSlug}/achievements`;
     await page.goto(achievementsUrl, { waitUntil: 'networkidle2', timeout: 25000 });
-    await new Promise((r) => setTimeout(r, 1500));
 
-    const html = await page.content();
-    return parseTrueAchievementsFlags(html);
+    // The Flag Filter checkboxes populate async after the initial page load --
+    // wait for one specifically instead of a fixed delay, which was sometimes
+    // running ahead of the panel finishing.
+    await page.waitForSelector('label.checkboxcaption', { timeout: 8000 }).catch(() => {
+      console.log(`[TrueAchievements] Flag Filter checkboxes never appeared for: ${gameTitle}`);
+    });
+
+const html = await page.content();
+
+if (!/checkboxcaption/i.test(html)) {
+  console.log(
+    `[DEBUG] TrueAchievements page HTML for "${gameTitle}" had no checkboxcaption labels at all (first 1000 chars):`,
+    html.substring(0, 1000),
+  );
+}
+
+return parseTrueAchievementsFlags(html);
   } catch (err) {
     console.warn('TrueAchievements lookup failed:', err.message);
     return null;
@@ -761,8 +769,8 @@ module.exports = {
         console.log(`Card already has a completion-time comment; skipping for: ${cardTitle}`);
       } else {
         const [hltbData, igdbTimeData] = await Promise.all([
-          fetchHowLongToBeatTime(game.name || cardTitle),
-          fetchIgdbTimeToBeat(game.id, clientId, token),
+        HowLongToBeatService.searchHowLongToBeat(game.name || cardTitle),
+        fetchIgdbTimeToBeat(game.id, clientId, token),
         ]);
 
         const mergedTimeData = mergeTimeData(hltbData, igdbTimeData);
