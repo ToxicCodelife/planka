@@ -33,10 +33,85 @@ async function getIgdbToken(clientId, clientSecret) {
   return auth.data.access_token;
 }
 
+let xboxPlatformIdsCache = null;
+
+async function getXboxPlatformIds(clientId, token) {
+  if (xboxPlatformIdsCache) {
+    return xboxPlatformIdsCache;
+  }
+
+  try {
+    const response = await axios({
+      url: 'https://api.igdb.com/v4/platforms',
+      method: 'POST',
+      headers: {
+        'Client-ID': clientId,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'text/plain',
+      },
+      // Looked up by name rather than hardcoded IDs -- IGDB's own platform
+      // IDs for these are stable in practice, but resolving them live means
+      // this doesn't silently break if that ever changes.
+      data: 'fields id, name; where name = ("Xbox", "Xbox 360", "Xbox One", "Xbox Series X|S"); limit 10;',
+    });
+
+    console.log('[DEBUG] Resolved Xbox platforms from IGDB:', JSON.stringify(response.data));
+
+    const ids = (response.data || []).map((p) => p.id);
+
+    if (ids.length === 0) {
+      console.warn(
+        'IGDB Xbox platform lookup returned no results; game search will not be platform-filtered.',
+      );
+      return null;
+    }
+
+    xboxPlatformIdsCache = ids;
+    return ids;
+  } catch (err) {
+    console.warn(
+      'IGDB Xbox platform lookup failed:',
+      err.response ? JSON.stringify(err.response.data) : err.message,
+    );
+    return null;
+  }
+}
+
 async function searchIgdbGame(cardTitle, clientId, token) {
   // Escape backslashes and double quotes so titles with punctuation don't
   // break out of the Apicalypse string literal.
   const escapedTitle = cardTitle.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const fieldsClause =
+    'fields id, name, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 1;';
+
+  const xboxPlatformIds = await getXboxPlatformIds(clientId, token);
+
+  if (xboxPlatformIds) {
+    const filteredResponse = await axios({
+      url: 'https://api.igdb.com/v4/games',
+      method: 'POST',
+      headers: {
+        'Client-ID': clientId,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'text/plain',
+      },
+      data: `search "${escapedTitle}"; where platforms = (${xboxPlatformIds.join(
+        ',',
+      )}); ${fieldsClause}`,
+    });
+
+    const filteredGame = filteredResponse.data && filteredResponse.data[0];
+    if (filteredGame) {
+      return filteredGame;
+    }
+
+    // Nothing came back restricted to Xbox platforms -- IGDB's platform
+    // tagging has real gaps for older/obscure titles, so fall back to an
+    // unrestricted search rather than losing the card's data entirely.
+    console.log(
+      `No Xbox-platform match on IGDB for "${cardTitle}"; retrying without the platform filter.`,
+    );
+  }
 
   const response = await axios({
     url: 'https://api.igdb.com/v4/games',
@@ -46,7 +121,7 @@ async function searchIgdbGame(cardTitle, clientId, token) {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'text/plain',
     },
-    data: `search "${escapedTitle}"; fields id, name, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 1;`,
+    data: `search "${escapedTitle}"; ${fieldsClause}`,
   });
 
   return response.data && response.data[0];
