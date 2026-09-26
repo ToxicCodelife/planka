@@ -16,7 +16,19 @@
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
+const fs = require('fs');
+const path = require('path');
 const sails = require('sails');
+
+// A Sails helper (is-preloaded-favicon-exists.js) scans this directory when
+// the helpers hook loads, and normally it's created as part of the app's
+// regular boot process (npm start / app.js) before that happens. Running
+// this script standalone with sails.load() bypasses that, so the helpers
+// hook fails to load with an ENOENT on this exact path unless we create it
+// ourselves first.
+fs.mkdirSync(path.join(__dirname, '..', '.tmp', 'public', 'preloaded-favicons'), {
+  recursive: true,
+});
 
 // Small delay between cards -- each card can launch several headless
 // Chromium instances in sequence (TrueAchievements, Co-Optimus, HowLongToBeat),
