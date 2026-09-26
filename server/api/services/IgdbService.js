@@ -161,36 +161,6 @@ async function fetchIgdbMultiplayerModes(gameId, clientId, token) {
   }
 }
 
-    console.log(
-      `[DEBUG] HowLongToBeat (howlongtobeat-api) search for "${gameName}" returned ${
-        results ? results.length : 0
-      } result(s).`,
-    );
-
-    if (!results || results.length === 0) {
-      return null;
-    }
-
-    // This package doesn't return a similarity score like the old one did,
-    // so prefer an exact case-insensitive name match; otherwise trust the
-    // API's own result ordering and take the first one.
-    const best =
-      results.find((r) => (r.name || '').toLowerCase() === gameName.toLowerCase()) || results[0];
-
-    console.log(`[DEBUG] HowLongToBeat best match: ${best.name}`);
-
-    return {
-      source: 'HowLongToBeat',
-      mainHours: best.gameplayMain || null,
-      mainExtraHours: best.gameplayExtended || null,
-      completionistHours: best.gameplayCompletionist || null,
-    };
-  } catch (err) {
-    console.warn('HowLongToBeat lookup failed:', err.stack || err.message);
-    return null;
-  }
-}
-
 function mergeTimeData(hltbData, igdbData) {
   if (!hltbData && !igdbData) {
     return null;
@@ -266,113 +236,6 @@ function buildMultiplayerText(mpData) {
   }
 
   return `**Group Size:** ${parts.join(' | ')}`;
-}
-
-async function fetchCoOptimusData(gameName) {
-  const executablePath =
-    process.env.CHROMIUM_PATH ||
-    (sails.config.custom ? sails.config.custom.chromiumPath : null) ||
-    '/usr/bin/chromium-browser';
-
-  let browser;
-  try {
-    // Same fix as TrueAchievements: a plain axios request to this endpoint
-    // gets a flat Cloudflare 403. Routing through the stealth-patched
-    // headless browser (confirmed working against this exact site earlier)
-    // gets past it.
-    browser = await puppeteerExtra.launch({
-      executablePath,
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setUserAgent(BROWSER_UA);
-
-    const apiUrl = `https://api.co-optimus.com/games.php?search=true&name=${encodeURIComponent(
-      gameName,
-    )}`;
-
-    // CONFIRMED (not an assumption anymore): Chromium's native XML viewer
-    // renders tags as visual tree UI, NOT as real DOM text -- so reading
-    // document.body.innerText strips every tag, leaving only the values
-    // concatenated together. Reading the raw HTTP response body directly
-    // (via the Response object page.goto() returns) bypasses that entirely
-    // and gives us the exact bytes the server sent.
-    const response = await page.goto(apiUrl, { waitUntil: 'networkidle2', timeout: 20000 });
-    const xml = await response.text();
-
-    console.log(
-      `[DEBUG] Co-Optimus raw response for "${gameName}" (first 500 chars):`,
-      xml.substring(0, 500),
-    );
-
-    const extractTag = (tag) => {
-      const match = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i').exec(xml);
-      return match ? match[1].trim() : null;
-    };
-
-    // NOTE: if a search-by-name returns multiple <game> blocks (e.g. the
-    // same title on several platforms), this simple regex approach grabs
-    // the FIRST one in the document -- a reasonable best-effort simplification.
-    const title = extractTag('title');
-    if (!title) {
-      return null;
-    }
-
-    const online = extractTag('online');
-    const splitscreen = extractTag('splitscreen');
-    const dropindropout = extractTag('dropindropout');
-    const campaign = extractTag('campaign');
-    const modes = extractTag('modes');
-    const featurelist = extractTag('featurelist');
-    const url = extractTag('url');
-
-    return {
-      title,
-      // NOTE: despite the separate params-legend page describing a similarly
-      // named search FILTER as "minimum player count", the <online> tag
-      // actually returned here is the game's max supported online co-op
-      // players (verified against Terraria's known real-world co-op support).
-      // We label it accordingly below -- do NOT present this as a minimum.
-      onlineMax: online ? parseInt(online, 10) || null : null,
-      splitscreenSupported: splitscreen === '1',
-      dropInDropOut: dropindropout === '1',
-      campaignCoop: campaign === '1',
-      coopModes: modes === '1',
-      featureList: featurelist,
-      pageUrl: url,
-    };
-  } catch (err) {
-    console.warn('Co-Optimus lookup failed:', err.message);
-    return null;
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
-  }
-}
-
-function buildCoOptimusText(data) {
-  if (!data) {
-    return null;
-  }
-
-  const lines = [`**Co-Op Info for ${data.title}** (source: Co-Optimus)`];
-
-  if (data.featureList) {
-    lines.push(`- Features: ${data.featureList}`);
-  }
-
-  if (data.onlineMax) {
-    lines.push(`- Online co-op: up to ${data.onlineMax} players`);
-  }
-
-  if (data.pageUrl) {
-    lines.push(`- More info: ${data.pageUrl}`);
-  }
-
-  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -519,23 +382,23 @@ async function fetchTrueAchievementsFlags(gameTitle) {
     const achievementsUrl = `https://www.trueachievements.com${bestSlug}/achievements`;
     await page.goto(achievementsUrl, { waitUntil: 'networkidle2', timeout: 25000 });
 
-    // The Flag Filter checkboxes populate async after the initial page load --
-    // wait for one specifically instead of a fixed delay, which was sometimes
-    // running ahead of the panel finishing.
+    // The Flag Filter checkboxes populate async after the initial page load
+    // -- wait for one specifically instead of a fixed delay, which was
+    // sometimes running ahead of the panel finishing on some games.
     await page.waitForSelector('label.checkboxcaption', { timeout: 8000 }).catch(() => {
       console.log(`[TrueAchievements] Flag Filter checkboxes never appeared for: ${gameTitle}`);
     });
 
-const html = await page.content();
+    const html = await page.content();
 
-if (!/checkboxcaption/i.test(html)) {
-  console.log(
-    `[DEBUG] TrueAchievements page HTML for "${gameTitle}" had no checkboxcaption labels at all (first 1000 chars):`,
-    html.substring(0, 1000),
-  );
-}
+    if (!/checkboxcaption/i.test(html)) {
+      console.log(
+        `[DEBUG] TrueAchievements page HTML for "${gameTitle}" had no checkboxcaption labels at all (first 1000 chars):`,
+        html.substring(0, 1000),
+      );
+    }
 
-return parseTrueAchievementsFlags(html);
+    return parseTrueAchievementsFlags(html);
   } catch (err) {
     console.warn('TrueAchievements lookup failed:', err.message);
     return null;
@@ -769,8 +632,8 @@ module.exports = {
         console.log(`Card already has a completion-time comment; skipping for: ${cardTitle}`);
       } else {
         const [hltbData, igdbTimeData] = await Promise.all([
-        HowLongToBeatService.searchHowLongToBeat(game.name || cardTitle),
-        fetchIgdbTimeToBeat(game.id, clientId, token),
+          HowLongToBeatService.searchHowLongToBeat(game.name || cardTitle),
+          fetchIgdbTimeToBeat(game.id, clientId, token),
         ]);
 
         const mergedTimeData = mergeTimeData(hltbData, igdbTimeData);
@@ -813,49 +676,52 @@ module.exports = {
       //    try/catch so a failure here NEVER blocks anything else.
       // -----------------------------------------------------------------
       if (hasCoOptimusComment) {
-  console.log(`Card already has a Co-Optimus comment; skipping for: ${cardTitle}`);
-} else {
-  try {
-    const gameEntry = await CoOptimusIndex.findGameEntry(game.name || cardTitle);
-
-    if (!gameEntry) {
-      console.log(`No Co-Optimus entry found in index for: ${cardTitle}`);
-    } else {
-      const coOpInfo = await CoOptimusService.fetchCoOptimusCoOpInfo(
-        gameEntry.url,
-        game.name || cardTitle,
-      );
-      const coOptimusText = CoOptimusService.buildCoOptimusText(coOpInfo, game.name || cardTitle);
-
-      if (coOptimusText) {
-        const creatorUser = await User.findOne({ id: card.creatorUserId });
-
-        if (creatorUser) {
-          await sails.helpers.comments.createOne.with({
-            project,
-            board,
-            list,
-            values: {
-              text: coOptimusText,
-              card,
-              user: creatorUser,
-            },
-          });
-
-          console.log(`Posted Co-Optimus comment for: ${cardTitle}`);
-        } else {
-          console.warn(
-            `Could not find creator user ${card.creatorUserId} to post Co-Optimus comment.`,
-          );
-        }
+        console.log(`Card already has a Co-Optimus comment; skipping for: ${cardTitle}`);
       } else {
-        console.log(`No Co-Optimus co-op data found for: ${cardTitle}`);
+        try {
+          const gameEntry = await CoOptimusIndex.findGameEntry(game.name || cardTitle);
+
+          if (!gameEntry) {
+            console.log(`No Co-Optimus entry found in index for: ${cardTitle}`);
+          } else {
+            const coOpInfo = await CoOptimusService.fetchCoOptimusCoOpInfo(
+              gameEntry.url,
+              game.name || cardTitle,
+            );
+            const coOptimusText = CoOptimusService.buildCoOptimusText(
+              coOpInfo,
+              game.name || cardTitle,
+            );
+
+            if (coOptimusText) {
+              const creatorUser = await User.findOne({ id: card.creatorUserId });
+
+              if (creatorUser) {
+                await sails.helpers.comments.createOne.with({
+                  project,
+                  board,
+                  list,
+                  values: {
+                    text: coOptimusText,
+                    card,
+                    user: creatorUser,
+                  },
+                });
+
+                console.log(`Posted Co-Optimus comment for: ${cardTitle}`);
+              } else {
+                console.warn(
+                  `Could not find creator user ${card.creatorUserId} to post Co-Optimus comment.`,
+                );
+              }
+            } else {
+              console.log(`No Co-Optimus co-op data found for: ${cardTitle}`);
+            }
+          }
+        } catch (err) {
+          console.warn(`Co-Optimus section failed safely for ${cardTitle}:`, err.message);
+        }
       }
-    }
-  } catch (err) {
-    console.warn(`Co-Optimus section failed safely for ${cardTitle}:`, err.message);
-  }
-}
 
       // -----------------------------------------------------------------
       // 6. TrueAchievements -> its own independent comment. Uses a real
