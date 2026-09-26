@@ -97,8 +97,14 @@ async function fetchHtml(url) {
     const page = await browser.newPage();
     await page.setUserAgent(BROWSER_UA);
 
-    const response = await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
-    return await response.text();
+    // NOTE: page.content() (not response.text()) -- Chromium decodes the
+    // page's actual encoding correctly regardless of what the server sent,
+    // whereas response.text() decodes strictly as UTF-8 and throws
+    // ("The encoded data was not valid for encoding utf-8") on pages
+    // that aren't. That only mattered for the old Co-Optimus XML endpoint's
+    // response, to dodge Chromium's XML viewer -- these are plain HTML pages.
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
+    return await page.content();
   } finally {
     if (browser) {
       await browser.close();
