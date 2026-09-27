@@ -141,7 +141,32 @@ async function searchIgdbGame(cardTitle, clientId, token) {
     data: `search "${escapedTitle}"; ${fieldsClause}`,
   });
 
-  return pickBestMatch(response.data);
+  const fuzzyGame = pickBestMatch(response.data);
+  if (fuzzyGame) {
+    return fuzzyGame;
+  }
+
+  // IGDB's fuzzy `search` can return zero results for titles made up
+  // entirely of common English words -- e.g. "We Were Here" -- its search
+  // backend appears to treat them as stopwords, leaving nothing to match
+  // on, even though the game is definitely in IGDB's database (confirmed:
+  // "We Were Here" and "We Were Here Too" both exist there). An exact name
+  // lookup sidesteps that: no fuzzy ranking involved, just a direct
+  // equality check against the game's actual title field.
+  console.log(`No fuzzy-search match on IGDB for "${cardTitle}"; trying an exact name match.`);
+
+  const exactResponse = await axios({
+    url: 'https://api.igdb.com/v4/games',
+    method: 'POST',
+    headers: {
+      'Client-ID': clientId,
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'text/plain',
+    },
+    data: `where name = "${escapedTitle}"; ${fieldsClause}`,
+  });
+
+  return pickBestMatch(exactResponse.data);
 }
 
 async function fetchIgdbTimeToBeat(gameId, clientId, token) {
