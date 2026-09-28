@@ -445,6 +445,22 @@ function normalizeForMatch(str) {
 // "Genre" or "Genres" and reads the comma-separated tags from its container.
 // Logs a debug note (not a crash) if it can't find one, so a real run's logs
 // will show whether this needs tuning.
+// Labels in TrueAchievements' "Game Information" panel. Values follow their
+// label as siblings, so a value list ends at the next one of these.
+const TA_INFO_LABELS =
+  /^(Publisher|Developer|Release|Platform|Genres?|Themes?|Features|Hardware|Notes|Medium|Size|Completion est\.?)$/i;
+
+// True for entries that are clearly panel text rather than a genre/theme
+// (e.g. "PublisherCurve GamesDeveloper..."). "Platform" is deliberately not
+// treated as junk since it's a legitimate IGDB genre.
+function isJunkTag(tag) {
+  return (
+    tag.length > 30 ||
+    /\d{4}/.test(tag) ||
+    /^(Publisher|Developer|Release|Features|Hardware|Notes|Medium|Size|Completion)/i.test(tag)
+  );
+}
+
 function extractTrueAchievementsTags(html, labelRegex, labelName) {
   const $ = cheerio.load(html);
   let tags = [];
@@ -459,11 +475,34 @@ function extractTrueAchievementsTags(html, labelRegex, labelName) {
       return;
     }
 
-    const remainingText = $(el).parent().text().replace(ownText, '').trim();
-    tags = remainingText
-      .split(',')
-      .map((g) => g.trim())
-      .filter(Boolean);
+    // Collect values from the siblings after the label, stopping at the
+    // next label. Links are read individually so "Action" and "Comedy"
+    // don't get glued together.
+    const collected = [];
+    let sibling = $(el).next();
+    let guard = 0;
+
+    while (sibling.length && guard < 10) {
+      const text = sibling.text().trim();
+
+      if (!sibling.is('a') && TA_INFO_LABELS.test(text)) {
+        break;
+      }
+
+      const links = sibling.is('a') ? sibling : sibling.find('a');
+      if (links.length > 0) {
+        links.each((__, a) => {
+          collected.push($(a).text().trim());
+        });
+      } else if (text) {
+        text.split(',').forEach((t) => collected.push(t.trim()));
+      }
+
+      sibling = sibling.next();
+      guard += 1;
+    }
+
+    tags = collected.filter((t) => t && !isJunkTag(t)).slice(0, 8);
   });
 
   if (tags.length === 0) {
@@ -1001,3 +1040,4 @@ module.exports = {
 // Exposed for one-off maintenance scripts (db/fill-missing-ta-tags.js).
 module.exports.fetchTrueAchievementsFlags = fetchTrueAchievementsFlags;
 module.exports.combineGenreLists = combineGenreLists;
+module.exports.isJunkTag = isJunkTag;
