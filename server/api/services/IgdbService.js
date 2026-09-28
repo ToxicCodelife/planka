@@ -11,6 +11,8 @@ const puppeteerCore = require('puppeteer-core'); // npm install puppeteer-core -
 const { addExtra } = require('puppeteer-extra'); // npm install puppeteer-extra --save
 // eslint-disable-next-line import/no-extraneous-dependencies
 const StealthPlugin = require('puppeteer-extra-plugin-stealth'); // npm install puppeteer-extra-plugin-stealth --save
+// eslint-disable-next-line import/no-extraneous-dependencies
+const cheerio = require('cheerio');
 const CoOptimusIndex = require('./CoOptimusIndex');
 const CoOptimusService = require('./CoOptimusService');
 const HowLongToBeatService = require('./HowLongToBeatService');
@@ -437,6 +439,70 @@ function normalizeForMatch(str) {
     .replace(/[^a-z0-9]/g, '');
 }
 
+// UNVERIFIED against the live page markup (same caveat as the Co-Optimus and
+// HowLongToBeat selectors -- TrueAchievements' Cloudflare wall blocks direct
+// inspection from here too). Looks for an element whose own text is exactly
+// "Genre" or "Genres" and reads the comma-separated tags from its container.
+// Logs a debug note (not a crash) if it can't find one, so a real run's logs
+// will show whether this needs tuning.
+function extractTrueAchievementsTags(html, labelRegex, labelName) {
+  const $ = cheerio.load(html);
+  let tags = [];
+
+  $('*').each((_, el) => {
+    if (tags.length > 0) {
+      return;
+    }
+
+    const ownText = $(el).clone().children().remove().end().text().trim();
+    if (!labelRegex.test(ownText)) {
+      return;
+    }
+
+    const remainingText = $(el).parent().text().replace(ownText, '').trim();
+    tags = remainingText
+      .split(',')
+      .map((g) => g.trim())
+      .filter(Boolean);
+  });
+
+  if (tags.length === 0) {
+    console.log(
+      `[TrueAchievements] Couldn't find a ${labelName} field on the page (selector is unverified against the live site -- may need tuning).`,
+    );
+  }
+
+  return tags;
+}
+
+function extractTrueAchievementsGenres(html) {
+  return extractTrueAchievementsTags(html, /^Genres?$/i, 'Genre');
+}
+
+function extractTrueAchievementsThemes(html) {
+  return extractTrueAchievementsTags(html, /^Themes?$/i, 'Theme');
+}
+
+// Merges genre lists from multiple sources, deduplicating case-insensitively
+// while keeping first-seen casing and order.
+function combineGenreLists(...lists) {
+  const seen = new Set();
+  const combined = [];
+
+  lists.forEach((list) => {
+    (list || []).forEach((genre) => {
+      const key = normalizeForMatch(genre);
+      if (!key || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      combined.push(genre.trim());
+    });
+  });
+
+  return combined;
+}
+
 async function fetchTrueAchievementsFlags(gameTitle) {
   const executablePath =
     process.env.CHROMIUM_PATH ||
@@ -515,7 +581,11 @@ async function fetchTrueAchievementsFlags(gameTitle) {
       );
     }
 
-    return parseTrueAchievementsFlags(html);
+    return {
+      flags: parseTrueAchievementsFlags(html),
+      genres: extractTrueAchievementsGenres(html),
+      themes: extractTrueAchievementsThemes(html),
+    };
   } catch (err) {
     console.warn('TrueAchievements lookup failed:', err.message);
     return null;
@@ -576,6 +646,21 @@ module.exports = {
       const hasTrueAchievementsComment = existingComments.some((c) =>
         /Achievement Flags for/i.test(c.text || ''),
       );
+      const hasGenresThemesSection = /\*\*Genres:\*\*/i.test(card.description || '');
+
+      // Shared TrueAchievements fetch -- used both to merge genre tags into
+      // the card description below and to post the achievement-flags
+      // comment further down. Fetched at most once per card, and only if
+      // at least one of those two things is still actually needed, so a
+      // fully-processed card doesn't launch Chromium again for nothing.
+      let taResult = null;
+      if (!hasTrueAchievementsComment || !hasGenresThemesSection) {
+        try {
+          taResult = await fetchTrueAchievementsFlags(game.name || cardTitle);
+        } catch (err) {
+          console.warn(`TrueAchievements fetch failed safely for ${cardTitle}:`, err.message);
+        }
+      }
 
       // -----------------------------------------------------------------
       // 1. Cover image -- skip if this card already has one (either from a
@@ -633,46 +718,61 @@ module.exports = {
       }
 
       // -----------------------------------------------------------------
-      // 2. Genres & Themes & Group Size -> card description
+      // 2. Genres & Themes & Group Size -> card description. Skipped if the
+      //    description already has a Genres/Themes/Group Size section --
+      //    this was previously unguarded and re-appended a duplicate block
+      //    on every re-run (e.g. the backfill script).
       // -----------------------------------------------------------------
-      const genreNames = (game.genres || []).map((g) => g.name).filter(Boolean);
-      const themeNames = (game.themes || []).map((t) => t.name).filter(Boolean);
-      const multiplayerData = await fetchIgdbMultiplayerModes(game.id, clientId, token);
-      const multiplayerText = buildMultiplayerText(multiplayerData);
+      if (hasGenresThemesSection) {
+        console.log(
+          `Card description already has a Genres/Themes section; skipping for: ${cardTitle}`,
+        );
+      } else {
+        const genreNames = combineGenreLists(
+          (game.genres || []).map((g) => g.name).filter(Boolean),
+          taResult && taResult.genres,
+        );
+        const themeNames = combineGenreLists(
+          (game.themes || []).map((t) => t.name).filter(Boolean),
+          taResult && taResult.themes,
+        );
+        const multiplayerData = await fetchIgdbMultiplayerModes(game.id, clientId, token);
+        const multiplayerText = buildMultiplayerText(multiplayerData);
 
-      if (genreNames.length > 0 || themeNames.length > 0 || multiplayerText) {
-        const descriptionParts = [];
+        if (genreNames.length > 0 || themeNames.length > 0 || multiplayerText) {
+          const descriptionParts = [];
 
-        if (card.description) {
-          descriptionParts.push(card.description);
-        }
-
-        if (genreNames.length > 0) {
-          descriptionParts.push(`**Genres:** ${genreNames.join(', ')}`);
-        }
-
-        if (themeNames.length > 0) {
-          descriptionParts.push(`**Themes:** ${themeNames.join(', ')}`);
-        }
-
-        if (multiplayerText) {
-          descriptionParts.push(multiplayerText);
-        }
-
-        const newDescription = descriptionParts.join('\n\n');
-
-        if (newDescription !== card.description) {
-          const updatedCard = await Card.updateOne({ id: cardId }).set({
-            description: newDescription,
-          });
-
-          if (updatedCard) {
-            sails.sockets.broadcast(`board:${board.id}`, 'cardUpdate', {
-              item: updatedCard,
-            });
+          if (card.description) {
+            descriptionParts.push(card.description);
           }
 
-          console.log(`Updated description with Genres/Themes/Group Size for: ${cardTitle}`);
+          if (genreNames.length > 0) {
+            descriptionParts.push(`**Genres:** ${genreNames.join(', ')}`);
+          }
+
+          if (themeNames.length > 0) {
+            descriptionParts.push(`**Themes:** ${themeNames.join(', ')}`);
+          }
+
+          if (multiplayerText) {
+            descriptionParts.push(multiplayerText);
+          }
+
+          const newDescription = descriptionParts.join('\n\n');
+
+          if (newDescription !== card.description) {
+            const updatedCard = await Card.updateOne({ id: cardId }).set({
+              description: newDescription,
+            });
+
+            if (updatedCard) {
+              sails.sockets.broadcast(`board:${board.id}`, 'cardUpdate', {
+                item: updatedCard,
+              });
+            }
+
+            console.log(`Updated description with Genres/Themes/Group Size for: ${cardTitle}`);
+          }
         }
       }
 
@@ -841,17 +941,17 @@ module.exports = {
       }
 
       // -----------------------------------------------------------------
-      // 6. TrueAchievements -> its own independent comment. Uses a real
-      //    headless browser (Puppeteer + stealth plugin) since this site's
-      //    achievement list is JS-rendered and Cloudflare-protected. Wrapped
-      //    in its own try/catch so a failure here NEVER blocks anything else.
+      // 6. TrueAchievements -> its own independent comment, from the shared
+      //    fetch done earlier (Section 2 also reads its genre data from
+      //    that same fetch, so this doesn't hit the site a second time).
       // -----------------------------------------------------------------
       if (hasTrueAchievementsComment) {
         console.log(`Card already has a TrueAchievements comment; skipping for: ${cardTitle}`);
+      } else if (!taResult) {
+        console.log(`No TrueAchievements data available for: ${cardTitle}`);
       } else {
         try {
-          const taData = await fetchTrueAchievementsFlags(game.name || cardTitle);
-          const taText = buildTrueAchievementsText(taData, game.name || cardTitle);
+          const taText = buildTrueAchievementsText(taResult.flags, game.name || cardTitle);
 
           if (taText) {
             const creatorUser = await User.findOne({ id: card.creatorUserId });
@@ -897,3 +997,7 @@ module.exports = {
     }
   },
 };
+
+// Exposed for one-off maintenance scripts (db/fill-missing-ta-tags.js).
+module.exports.fetchTrueAchievementsFlags = fetchTrueAchievementsFlags;
+module.exports.combineGenreLists = combineGenreLists;
