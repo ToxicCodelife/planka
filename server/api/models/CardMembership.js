@@ -35,6 +35,12 @@
  *           type: string
  *           description: ID of the user who is a member of the card
  *           example: "1357158568008091266"
+ *         status:
+ *           type: string
+ *           enum: [want, have, done]
+ *           nullable: true
+ *           description: This member's personal status for the card's game
+ *           example: want
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -50,10 +56,23 @@
  */
 
 module.exports = {
+  Statuses: {
+    WANT: 'want',
+    HAVE: 'have',
+    DONE: 'done',
+  },
+
   attributes: {
     //  ╔═╗╦═╗╦╔╦╗╦╔╦╗╦╦  ╦╔═╗╔═╗
     //  ╠═╝╠╦╝║║║║║ ║ ║╚╗╔╝║╣ ╚═╗
     //  ╩  ╩╚═╩╩ ╩╩ ╩ ╩ ╚╝ ╚═╝╚═╝
+
+    status: {
+      type: 'string',
+      isIn: ['want', 'have', 'done'],
+      allowNull: true,
+      columnName: 'status',
+    },
 
     //  ╔═╗╔╦╗╔╗ ╔═╗╔╦╗╔═╗
     //  ║╣ ║║║╠╩╗║╣  ║║╚═╗
