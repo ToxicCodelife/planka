@@ -199,6 +199,7 @@ module.exports.routes = {
   'DELETE /api/cards/:id': 'cards/delete',
   'POST /api/cards/:cardId/card-memberships': 'card-memberships/create',
   'DELETE /api/cards/:cardId/card-memberships/userId::userId': 'card-memberships/delete',
+  'PATCH /api/card-memberships/:id': 'card-memberships/update',
   'POST /api/cards/:cardId/card-labels': 'card-labels/create',
   'DELETE /api/cards/:cardId/card-labels/labelId::labelId': 'card-labels/delete',
 
