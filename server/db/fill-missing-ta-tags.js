@@ -84,39 +84,54 @@ async function run() {
       // eslint-disable-next-line no-await-in-loop
       const taResult = await IgdbService.fetchTrueAchievementsFlags(card.name);
 
+      let description = card.description || '';
+
+      // Repair: drop panel-text junk that an earlier version of this script
+      // wrote into the Genres/Themes lines (e.g. "PublisherCurve Games...").
+      const existingGenres = parseLine(description, 'Genres').filter(
+        (t) => !IgdbService.isJunkTag(t),
+      );
+      const existingThemes = parseLine(description, 'Themes').filter(
+        (t) => !IgdbService.isJunkTag(t),
+      );
+
+      if (existingGenres.length > 0) {
+        description = setLine(description, 'Genres', existingGenres);
+      }
+      if (existingThemes.length > 0) {
+        description = setLine(description, 'Themes', existingThemes);
+      }
+
+      let addedGenres = 0;
+      let addedThemes = 0;
+
       if (taResult) {
-        let description = card.description || '';
-
-        const existingGenres = parseLine(description, 'Genres');
-        const existingThemes = parseLine(description, 'Themes');
-
         // combineGenreLists keeps existing entries first and only adds TA
         // values that aren't already there (ignoring case/punctuation).
         const mergedGenres = IgdbService.combineGenreLists(existingGenres, taResult.genres);
         const mergedThemes = IgdbService.combineGenreLists(existingThemes, taResult.themes);
 
-        if (mergedGenres.length > existingGenres.length) {
+        addedGenres = mergedGenres.length - existingGenres.length;
+        addedThemes = mergedThemes.length - existingThemes.length;
+
+        if (addedGenres > 0) {
           description = setLine(description, 'Genres', mergedGenres);
         }
 
-        if (mergedThemes.length > existingThemes.length) {
+        if (addedThemes > 0) {
           description = setLine(description, 'Themes', mergedThemes);
-        }
-
-        if (description !== (card.description || '')) {
-          // eslint-disable-next-line no-await-in-loop
-          await Card.updateOne({ id: card.id }).set({ description });
-          updatedCount += 1;
-          console.log(
-            `  Added: genres +${mergedGenres.length - existingGenres.length}, themes +${
-              mergedThemes.length - existingThemes.length
-            }`,
-          );
-        } else {
-          console.log('  Nothing new to add.');
         }
       } else {
         console.log('  No TrueAchievements data found.');
+      }
+
+      if (description !== (card.description || '')) {
+        // eslint-disable-next-line no-await-in-loop
+        await Card.updateOne({ id: card.id }).set({ description });
+        updatedCount += 1;
+        console.log(`  Updated (genres +${addedGenres}, themes +${addedThemes}, junk repaired if any).`);
+      } else {
+        console.log('  Nothing to change.');
       }
     } catch (cardErr) {
       console.warn(`  Failed for "${card.name}":`, cardErr.message);
