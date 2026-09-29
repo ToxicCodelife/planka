@@ -274,6 +274,21 @@ const handleUserToCardAdd = (cardMembership) => ({
   },
 });
 
+const updateCardMembership = (id, data) => ({
+  type: EntryActionTypes.CARD_MEMBERSHIP_UPDATE,
+  payload: {
+    id,
+    data,
+  },
+});
+
+const handleCardMembershipUpdate = (cardMembership) => ({
+  type: EntryActionTypes.CARD_MEMBERSHIP_UPDATE_HANDLE,
+  payload: {
+    cardMembership,
+  },
+});
+
 const removeUserFromCard = (id, cardId) => ({
   type: EntryActionTypes.USER_FROM_CARD_REMOVE,
   payload: {
@@ -357,6 +372,8 @@ export default {
   addUserToCurrentCard,
   addCurrentUserToCurrentCard,
   handleUserToCardAdd,
+  updateCardMembership,
+  handleCardMembershipUpdate,
   removeUserFromCard,
   removeUserFromCurrentCard,
   removeCurrentUserFromCurrentCard,
