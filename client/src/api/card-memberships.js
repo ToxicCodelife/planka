@@ -10,10 +10,14 @@ import socket from './socket';
 const createCardMembership = (cardId, data, headers) =>
   socket.post(`/cards/${cardId}/card-memberships`, data, headers);
 
+const updateCardMembership = (id, data, headers) =>
+  socket.patch(`/card-memberships/${id}`, data, headers);
+
 const deleteCardMembership = (cardId, userId, headers) =>
   socket.delete(`/cards/${cardId}/card-memberships/userId:${userId}`, undefined, headers);
 
 export default {
   createCardMembership,
+  updateCardMembership,
   deleteCardMembership,
 };
