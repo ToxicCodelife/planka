@@ -577,6 +577,24 @@ export function* handleUserToCardAdd(cardMembership) {
   yield put(actions.handleUserToCardAdd(cardMembership));
 }
 
+export function* updateCardMembership(id, data) {
+  yield put(actions.updateCardMembership(id, data));
+
+  let cardMembership;
+  try {
+    ({ item: cardMembership } = yield call(request, api.updateCardMembership, id, data));
+  } catch (error) {
+    yield put(actions.updateCardMembership.failure(id, error));
+    return;
+  }
+
+  yield put(actions.updateCardMembership.success(cardMembership));
+}
+
+export function* handleCardMembershipUpdate(cardMembership) {
+  yield put(actions.handleCardMembershipUpdate(cardMembership));
+}
+
 export function* removeUserFromCard(id, cardId) {
   yield put(actions.removeUserFromCard(id, cardId));
 
@@ -678,6 +696,8 @@ export default {
   addUserToCurrentCard,
   addCurrentUserToCurrentCard,
   handleUserToCardAdd,
+  updateCardMembership,
+  handleCardMembershipUpdate,
   removeUserFromCard,
   removeUserFromCurrentCard,
   removeCurrentUserFromCurrentCard,
