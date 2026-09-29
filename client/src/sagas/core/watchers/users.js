@@ -123,6 +123,12 @@ export default function* usersWatchers() {
     takeEvery(EntryActionTypes.USER_TO_CARD_ADD_HANDLE, ({ payload: { cardMembership } }) =>
       services.handleUserToCardAdd(cardMembership),
     ),
+    takeEvery(EntryActionTypes.CARD_MEMBERSHIP_UPDATE, ({ payload: { id, data } }) =>
+      services.updateCardMembership(id, data),
+    ),
+    takeEvery(EntryActionTypes.CARD_MEMBERSHIP_UPDATE_HANDLE, ({ payload: { cardMembership } }) =>
+      services.handleCardMembershipUpdate(cardMembership),
+    ),
     takeEvery(EntryActionTypes.USER_FROM_CARD_REMOVE, ({ payload: { id, cardId } }) =>
       services.removeUserFromCard(id, cardId),
     ),
