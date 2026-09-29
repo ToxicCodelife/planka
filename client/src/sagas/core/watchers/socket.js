@@ -175,6 +175,10 @@ const createSocketEventsChannel = () =>
       emit(entryActions.handleUserToCardAdd(item));
     };
 
+    const handleCardMembershipUpdate = ({ item }) => {
+      emit(entryActions.handleCardMembershipUpdate(item));
+    };
+
     const handleUserFromCardRemove = ({ item }) => {
       emit(entryActions.handleUserFromCardRemove(item));
     };
@@ -348,6 +352,7 @@ const createSocketEventsChannel = () =>
     socket.on('cardDelete', handleCardDelete);
 
     socket.on('cardMembershipCreate', handleUserToCardAdd);
+    socket.on('cardMembershipUpdate', handleCardMembershipUpdate);
     socket.on('cardMembershipDelete', handleUserFromCardRemove);
 
     socket.on('cardLabelCreate', handleLabelToCardAdd);
@@ -445,6 +450,7 @@ const createSocketEventsChannel = () =>
       socket.off('cardDelete', handleCardDelete);
 
       socket.off('cardMembershipCreate', handleUserToCardAdd);
+      socket.off('cardMembershipUpdate', handleCardMembershipUpdate);
       socket.off('cardMembershipDelete', handleUserFromCardRemove);
 
       socket.off('cardLabelCreate', handleLabelToCardAdd);
