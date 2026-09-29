@@ -13,6 +13,8 @@ const createOne = (values) => CardMembership.create({ ...values }).fetch();
 
 const getByIds = (ids) => defaultFind(ids);
 
+const getOneById = (id) => CardMembership.findOne(id);
+
 const getByCardId = (cardId, { userIdOrIds } = {}) => {
   const criteria = {
     cardId,
@@ -35,6 +37,8 @@ const getOneByCardIdAndUserId = (cardId, userId) =>
     userId,
   });
 
+const updateOne = (id, values) => CardMembership.updateOne(id).set(values);
+
 // eslint-disable-next-line no-underscore-dangle
 const delete_ = (criteria) => CardMembership.destroy(criteria).fetch();
 
@@ -44,9 +48,11 @@ module.exports = {
   create,
   createOne,
   getByIds,
+  getOneById,
   getByCardId,
   getByCardIds,
   getOneByCardIdAndUserId,
+  updateOne,
   deleteOne,
   delete: delete_,
 };
