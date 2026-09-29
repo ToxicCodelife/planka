@@ -508,6 +508,36 @@ const handleUserToCardAdd = (cardMembership) => ({
   },
 });
 
+const updateCardMembership = (id, data) => ({
+  type: ActionTypes.CARD_MEMBERSHIP_UPDATE,
+  payload: {
+    id,
+    data,
+  },
+});
+
+updateCardMembership.success = (cardMembership) => ({
+  type: ActionTypes.CARD_MEMBERSHIP_UPDATE__SUCCESS,
+  payload: {
+    cardMembership,
+  },
+});
+
+updateCardMembership.failure = (id, error) => ({
+  type: ActionTypes.CARD_MEMBERSHIP_UPDATE__FAILURE,
+  payload: {
+    id,
+    error,
+  },
+});
+
+const handleCardMembershipUpdate = (cardMembership) => ({
+  type: ActionTypes.CARD_MEMBERSHIP_UPDATE_HANDLE,
+  payload: {
+    cardMembership,
+  },
+});
+
 const removeUserFromCard = (id, cardId) => ({
   type: ActionTypes.USER_FROM_CARD_REMOVE,
   payload: {
@@ -587,6 +617,8 @@ export default {
   handleUserDelete,
   addUserToCard,
   handleUserToCardAdd,
+  updateCardMembership,
+  handleCardMembershipUpdate,
   removeUserFromCard,
   handleUserFromCardRemove,
   addUserToBoardFilter,
