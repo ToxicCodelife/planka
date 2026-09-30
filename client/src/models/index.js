@@ -14,6 +14,7 @@ import BoardMembership from './BoardMembership';
 import Label from './Label';
 import List from './List';
 import Card from './Card';
+import CardMembership from './CardMembership';
 import TaskList from './TaskList';
 import Task from './Task';
 import Attachment from './Attachment';
@@ -37,6 +38,7 @@ export {
   Label,
   List,
   Card,
+  CardMembership,
   TaskList,
   Task,
   Attachment,
