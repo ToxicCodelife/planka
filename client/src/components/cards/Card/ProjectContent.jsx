@@ -17,6 +17,7 @@ import { BoardMembershipRoles, BoardViews } from '../../../constants/Enums';
 import TaskList from './TaskList';
 import DueDateChip from '../DueDateChip';
 import StopwatchChip from '../StopwatchChip';
+import MembershipStatusChip from '../MembershipStatusChip';
 import TimeAgo from '../../common/TimeAgo';
 import UserAvatar from '../../users/UserAvatar';
 import LabelChip from '../../labels/LabelChip';
@@ -27,7 +28,10 @@ import styles from './ProjectContent.module.scss';
 const ProjectContent = React.memo(({ cardId }) => {
   const selectCardById = useMemo(() => selectors.makeSelectCardById(), []);
   const selectListById = useMemo(() => selectors.makeSelectListById(), []);
-  const selectUserIdsByCardId = useMemo(() => selectors.makeSelectUserIdsByCardId(), []);
+  const selectCardMembershipsByCardId = useMemo(
+    () => selectors.makeSelectCardMembershipsByCardId(),
+    [],
+  );
   const selectLabelIdsByCardId = useMemo(() => selectors.makeSelectLabelIdsByCardId(), []);
 
   const selectShownOnFrontOfCardTaskListIdsByCardId = useMemo(
@@ -54,7 +58,7 @@ const ProjectContent = React.memo(({ cardId }) => {
 
   const card = useSelector((state) => selectCardById(state, cardId));
   const list = useSelector((state) => selectListById(state, card.listId));
-  const userIds = useSelector((state) => selectUserIdsByCardId(state, cardId));
+  const cardMemberships = useSelector((state) => selectCardMembershipsByCardId(state, cardId));
   const labelIds = useSelector((state) => selectLabelIdsByCardId(state, cardId));
 
   const taskListIds = useSelector((state) =>
@@ -128,19 +132,27 @@ const ProjectContent = React.memo(({ cardId }) => {
     !hasInformation;
 
   const usersNode =
-    userIds.length > 0 || withCreator ? (
+    cardMemberships.length > 0 || withCreator ? (
       <span className={classNames(styles.attachments, styles.attachmentsRight)}>
         {withCreator && (
           <>
             <span className={classNames(styles.attachment, styles.attachmentRight)}>
               <UserAvatar withCreatorIndicator id={card.creatorUserId} size="small" />
             </span>
-            {userIds.length > 0 && <span className={styles.creatorDivider} />}
+            {cardMemberships.length > 0 && <span className={styles.creatorDivider} />}
           </>
         )}
-        {userIds.map((userId) => (
-          <span key={userId} className={classNames(styles.attachment, styles.attachmentRight)}>
-            <UserAvatar id={userId} size="small" />
+        {cardMemberships.map((cardMembership) => (
+          <span
+            key={cardMembership.id}
+            className={classNames(styles.attachment, styles.attachmentRight)}
+          >
+            <UserAvatar id={cardMembership.userId} size="small" />
+            <MembershipStatusChip
+              id={cardMembership.id}
+              userId={cardMembership.userId}
+              status={cardMembership.status}
+            />
           </span>
         ))}
       </span>
