@@ -68,6 +68,23 @@ export const makeSelectUserIdsByCardId = () =>
 
 export const selectUserIdsByCardId = makeSelectUserIdsByCardId();
 
+export const makeSelectCardMembershipsByCardId = () =>
+  createSelector(
+    orm,
+    (_, id) => id,
+    ({ Card }, id) => {
+      const cardModel = Card.withId(id);
+
+      if (!cardModel) {
+        return cardModel;
+      }
+
+      return cardModel.memberships.toRefArray();
+    },
+  );
+
+export const selectCardMembershipsByCardId = makeSelectCardMembershipsByCardId();
+
 export const makeSelectLabelIdsByCardId = () =>
   createSelector(
     orm,
@@ -469,6 +486,8 @@ export default {
   selectCardIndexById,
   makeSelectUserIdsByCardId,
   selectUserIdsByCardId,
+  makeSelectCardMembershipsByCardId,
+  selectCardMembershipsByCardId,
   makeSelectLabelIdsByCardId,
   selectLabelIdsByCardId,
   makeSelectShownOnFrontOfCardTaskListIdsByCardId,
