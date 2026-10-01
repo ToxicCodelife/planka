@@ -137,7 +137,7 @@ const ProjectContent = React.memo(({ cardId }) => {
         {withCreator && (
           <>
             <span className={classNames(styles.attachment, styles.attachmentRight)}>
-              <UserAvatar withCreatorIndicator id={card.creatorUserId} size="small" />
+              <UserAvatar withCreatorIndicator id={card.creatorUserId} size="medium" />
             </span>
             {cardMemberships.length > 0 && <span className={styles.creatorDivider} />}
           </>
@@ -147,7 +147,7 @@ const ProjectContent = React.memo(({ cardId }) => {
             key={cardMembership.id}
             className={classNames(styles.attachment, styles.attachmentRight)}
           >
-            <UserAvatar id={cardMembership.userId} size="small" />
+            <UserAvatar id={cardMembership.userId} size="medium" />
             <MembershipStatusChip
               id={cardMembership.id}
               userId={cardMembership.userId}
