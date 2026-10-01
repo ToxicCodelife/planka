@@ -110,9 +110,12 @@ module.exports = {
       throw Errors.CARD_MEMBERSHIP_NOT_FOUND; // Forbidden
     }
 
-    // Each member's status is personal -- only that member may change it,
-    // not any other board member who happens to click their label.
-    if (cardMembership.userId !== currentUser.id) {
+    // Each member's status is personal -- only that member, or a global
+    // admin, may change it. Not any other board member who happens to
+    // click their label.
+    const isAdmin = currentUser.role === User.Roles.ADMIN;
+
+    if (cardMembership.userId !== currentUser.id && !isAdmin) {
       throw Errors.NOT_ENOUGH_RIGHTS;
     }
 
