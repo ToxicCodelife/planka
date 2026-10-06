@@ -200,6 +200,69 @@ module.exports = {
       'stopwatch',
     ]);
 
+    // 0. Check whether this exact game already exists as an archived card on
+    // this board. If it does, pull it back out of the archive (keeping its
+    // existing description/cover/comments/attachments) instead of creating
+    // a brand-new duplicate card.
+    const archiveList = await List.qm.getOneArchiveByBoardId(board.id);
+
+    if (archiveList) {
+      const archivedCard = await Card.qm.getOneByListIdAndName(archiveList.id, inputs.name);
+
+      if (archivedCard) {
+        const restoredCard = await sails.helpers.cards.updateOne
+          .with({
+            project,
+            board,
+            list: archiveList,
+            record: archivedCard,
+            values: {
+              list,
+              position: values.position,
+            },
+            actorUser: currentUser,
+            request: this.req,
+          })
+          .intercept('positionMustBeInValues', () => Errors.POSITION_MUST_BE_PRESENT);
+
+        // Put the person who brought it back on the card, without touching
+        // anyone else's existing want/have/done status.
+        const existingMembership = await CardMembership.qm.getOneByCardIdAndUserId(
+          restoredCard.id,
+          currentUser.id,
+        );
+
+        if (!existingMembership) {
+          let membership;
+          try {
+            membership = await CardMembership.qm.createOne({
+              cardId: restoredCard.id,
+              userId: currentUser.id,
+            });
+          } catch (error) {
+            if (error.code !== 'E_UNIQUE') {
+              throw error;
+            }
+          }
+
+          if (membership) {
+            sails.sockets.broadcast(
+              `board:${board.id}`,
+              'cardMembershipCreate',
+              {
+                item: membership,
+              },
+              this.req,
+            );
+          }
+        }
+
+        return {
+          item: restoredCard,
+        };
+      }
+    }
+
     // 1. Natively create the card inside Planka's system
     const card = await sails.helpers.cards.createOne
       .with({
