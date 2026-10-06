@@ -135,6 +135,37 @@ module.exports = {
       throw Errors.CARD_MEMBERSHIP_NOT_FOUND;
     }
 
+    // If this update just marked the last remaining member as "done", move
+    // the card into the board's Archive list automatically.
+    if (
+      updatedCardMembership.status === CardMembership.Statuses.DONE &&
+      list.type !== List.Types.ARCHIVE
+    ) {
+      const allMemberships = await CardMembership.qm.getByCardId(card.id);
+
+      const allDone =
+        allMemberships.length > 0 &&
+        allMemberships.every((membership) => membership.status === CardMembership.Statuses.DONE);
+
+      if (allDone) {
+        const archiveList = await List.qm.getOneArchiveByBoardId(board.id);
+
+        if (archiveList) {
+          await sails.helpers.cards.updateOne.with({
+            project,
+            board,
+            list,
+            record: card,
+            values: {
+              list: archiveList,
+            },
+            actorUser: currentUser,
+            request: this.req,
+          });
+        }
+      }
+    }
+
     return {
       item: updatedCardMembership,
     };
