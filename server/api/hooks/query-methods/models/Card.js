@@ -38,6 +38,12 @@ const getByListId = async (listId, { exceptIdOrIds, sort = ['position', 'id'] } 
   return defaultFind(criteria, { sort });
 };
 
+const getOneByListIdAndName = (listId, name) =>
+  Card.findOne({
+    listId,
+    name,
+  });
+
 const getByEndlessListId = async (listId, { before, search, userIds, labelIds }) => {
   if (search || userIds || labelIds) {
     if (userIds && userIds.length === 0) {
@@ -240,6 +246,7 @@ module.exports = {
   getByIds,
   getByBoardId,
   getByListId,
+  getOneByListIdAndName,
   getByEndlessListId,
   getByListIds,
   getOneById,
