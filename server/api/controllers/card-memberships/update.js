@@ -151,6 +151,14 @@ module.exports = {
         const archiveList = await List.qm.getOneArchiveByBoardId(board.id);
 
         if (archiveList) {
+          // NOTICE: 'request' is intentionally left out here. Passing it
+          // would exclude the current browser from the real-time broadcast
+          // (normally fine, since that browser gets the result straight
+          // back from its own request) -- but this move is a side effect of
+          // the status-update request, not a move request, so the response
+          // to this call never mentions it. Leaving 'request' out makes
+          // sure everyone, including whoever just finished the card,
+          // actually sees it jump to Archive without needing a refresh.
           await sails.helpers.cards.updateOne.with({
             project,
             board,
@@ -160,7 +168,6 @@ module.exports = {
               list: archiveList,
             },
             actorUser: currentUser,
-            request: this.req,
           });
         }
       }
