@@ -246,14 +246,14 @@ module.exports = {
           }
 
           if (membership) {
-            sails.sockets.broadcast(
-              `board:${board.id}`,
-              'cardMembershipCreate',
-              {
-                item: membership,
-              },
-              this.req,
-            );
+            // NOTICE: no 'request' argument here on purpose -- unlike the
+            // card move above, the HTTP response below never mentions this
+            // new membership, so excluding the requester's own browser from
+            // the broadcast would leave them stuck looking at a card they
+            // can't see themselves on until they refresh.
+            sails.sockets.broadcast(`board:${board.id}`, 'cardMembershipCreate', {
+              item: membership,
+            });
           }
         }
 
