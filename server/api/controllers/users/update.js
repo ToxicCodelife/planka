@@ -54,6 +54,12 @@
  *                 nullable: true
  *                 description: Organization or company name
  *                 example: Acme Corporation
+ *               trueAchievementsUsername:
+ *                 type: string
+ *                 maxLength: 128
+ *                 nullable: true
+ *                 description: Linked TrueAchievements gamertag, used to auto-sync owned/wishlisted games
+ *                 example: ToxicTron420
  *               language:
  *                 type: string
  *                 enum: [ar-YE, bg-BG, ca-ES, cs-CZ, da-DK, de-DE, el-GR, en-GB, en-US, es-ES, et-EE, fa-IR, fi-FI, fr-FR, hu-HU, id-ID, it-IT, ja-JP, ko-KR, nl-NL, pl-PL, pt-BR, pt-PT, ro-RO, ru-RU, sk-SK, sr-Cyrl-RS, sr-Latn-RS, sv-SE, tr-TR, uk-UA, uz-UZ, vi-VN, zh-CN, zh-TW]
@@ -173,6 +179,12 @@ module.exports = {
       maxLength: 128,
       allowNull: true,
     },
+    trueAchievementsUsername: {
+      type: 'string',
+      isNotEmptyString: true,
+      maxLength: 128,
+      allowNull: true,
+    },
     language: {
       type: 'string',
       isIn: User.LANGUAGES,
@@ -229,7 +241,14 @@ module.exports = {
   async fn(inputs) {
     const { currentUser } = this.req;
 
-    const availableInputKeys = ['id', 'name', 'avatar', 'phone', 'organization'];
+    const availableInputKeys = [
+      'id',
+      'name',
+      'avatar',
+      'phone',
+      'organization',
+      'trueAchievementsUsername',
+    ];
     if (inputs.id === currentUser.id) {
       availableInputKeys.push(...User.PERSONAL_FIELD_NAMES);
     } else if (currentUser.role === User.Roles.ADMIN) {
@@ -266,6 +285,7 @@ module.exports = {
         'avatar',
         'phone',
         'organization',
+        'trueAchievementsUsername',
         'language',
         'apiKey',
         'subscribeToOwnCards',
