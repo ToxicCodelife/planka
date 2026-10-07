@@ -64,14 +64,16 @@ const ProfilePane = React.memo(({ userId }) => {
       name: user.name,
       phone: user.phone,
       organization: user.organization,
+      trueAchievementsUsername: user.trueAchievementsUsername,
     }),
-    [user.name, user.phone, user.organization],
+    [user.name, user.phone, user.organization, user.trueAchievementsUsername],
   );
 
   const [data, handleFieldChange, setData] = useForm(() => ({
     name: defaultInfoData.name || '',
     phone: defaultInfoData.phone || '',
     organization: defaultInfoData.organization || '',
+    trueAchievementsUsername: defaultInfoData.trueAchievementsUsername || '',
     username: user.username || '',
     email: user.email || '',
     newPassword: '',
@@ -83,6 +85,7 @@ const ProfilePane = React.memo(({ userId }) => {
       name: data.name.trim(),
       phone: data.phone.trim() || null,
       organization: data.organization.trim() || null,
+      trueAchievementsUsername: data.trueAchievementsUsername.trim() || null,
       username: data.username.trim() || null,
       email: data.email.trim(),
       newPassword: data.newPassword,
@@ -97,6 +100,7 @@ const ProfilePane = React.memo(({ userId }) => {
           name: cleanData.name,
           phone: cleanData.phone,
           organization: cleanData.organization,
+          trueAchievementsUsername: cleanData.trueAchievementsUsername,
         },
         defaultInfoData,
       ),
@@ -203,6 +207,7 @@ const ProfilePane = React.memo(({ userId }) => {
       const infoData = {
         phone: cleanData.phone,
         organization: cleanData.organization,
+        trueAchievementsUsername: cleanData.trueAchievementsUsername,
       };
       if (isNameEditable) {
         infoData.name = cleanData.name;
@@ -396,6 +401,17 @@ const ProfilePane = React.memo(({ userId }) => {
                 name="organization"
                 value={data.organization}
                 maxLength={128}
+                onChange={handleFieldChange}
+              />
+            </div>
+            <div className={styles.fieldGroup}>
+              <div className={styles.text}>TrueAchievements Username</div>
+              <Input
+                fluid
+                name="trueAchievementsUsername"
+                value={data.trueAchievementsUsername}
+                maxLength={128}
+                placeholder="e.g. ToxicTron420"
                 onChange={handleFieldChange}
               />
             </div>
