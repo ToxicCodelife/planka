@@ -1,156 +1,109 @@
-/* eslint-disable no-console */
-// eslint-disable-next-line import/no-extraneous-dependencies
-const puppeteerCore = require('puppeteer-core');
-// eslint-disable-next-line import/no-extraneous-dependencies
-const { addExtra } = require('puppeteer-extra');
-// eslint-disable-next-line import/no-extraneous-dependencies
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-// eslint-disable-next-line import/no-extraneous-dependencies
-const cheerio = require('cheerio');
+// db/scan-true-achievements.js
+//
+// PHASE 2 / DRY RUN -- does not touch Planka data. For every user with a
+// TrueAchievements username set, scrapes their public "Game Collection" page
+// (-> have) and "Wishlist" page (-> want), and prints what it found,
+// including a best-guess platform (Xbox 360 vs Xbox One/Series) for each
+// game.
+//
+// The exact markup of these two pages hasn't been verified from here (same
+// Cloudflare wall that blocks everything else TrueAchievements-related) --
+// this is a best-effort first pass with heavy debug logging, same approach
+// as the original TrueAchievements genre/theme scraping needed tuning from
+// real logs. Run it, paste the output back, and selectors get adjusted from
+// there.
+//
+// Run with: node db/scan-true-achievements.js
 
-const puppeteerExtra = addExtra(puppeteerCore);
-puppeteerExtra.use(StealthPlugin());
+process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 
-// Same approach as IgdbService's TrueAchievements lookup: Cloudflare's
-// interactive managed challenge blocks plain HTTP requests and vanilla
-// headless Chromium alike, so this reuses the exact same stealth-plugin
-// setup that's already proven to get through for the per-game pages.
-const BROWSER_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+const fs = require('fs');
+const path = require('path');
+const sails = require('sails');
 
-// TrueAchievements gamer URLs use a literal "+" for spaces in the gamertag
-// (e.g. "Das Chocobo" -> ".../gamer/Das+Chocobo"), not %20.
-function toTaSlug(username) {
-  return encodeURIComponent(String(username || '').trim()).replace(/%20/g, '+');
-}
+fs.mkdirSync(path.join(__dirname, '..', '.tmp', 'public', 'preloaded-favicons'), {
+  recursive: true,
+});
 
-function guessPlatformFromText(text) {
-  if (/xbox\s*360/i.test(text)) {
-    return '360';
-  }
+const DELAY_BETWEEN_GAMERS_MS = 4000;
 
-  if (/xbox\s*(one|series)/i.test(text)) {
-    return 'oneOrSeries';
-  }
-
-  return null;
-}
-
-// Walks up from a game link to the nearest container that plausibly holds
-// that row's platform text (table row, list item, or a div wrapping both),
-// and guesses the platform from whatever text is in it. Unverified against
-// the live markup -- if this keeps returning UNKNOWN in the dry-run output,
-// it needs tuning from real logs.
-function guessRowPlatform($, anchorEl) {
-  let node = $(anchorEl);
-
-  for (let depth = 0; depth < 6; depth += 1) {
-    const guess = guessPlatformFromText(node.text());
-
-    if (guess) {
-      return guess;
+sails.load(
+  {
+    hooks: { grunt: false },
+    log: { level: 'warn' },
+  },
+  async (err) => {
+    if (err) {
+      console.error('Failed to lift Sails app:', err);
+      process.exit(1);
     }
 
-    const tagName = node.prop('tagName');
-    if (tagName && /^(TR|LI)$/i.test(tagName)) {
-      // Reached a natural row boundary with no platform match inside it --
-      // climbing further risks picking up a neighboring row's platform.
-      break;
+    try {
+      await run();
+    } catch (runErr) {
+      console.error('TrueAchievements scan failed:', runErr);
     }
 
-    const parent = node.parent();
-    if (parent.length === 0) {
-      break;
-    }
+    sails.lower(() => process.exit(0));
+  },
+);
 
-    node = parent;
+async function run() {
+  // eslint-disable-next-line global-require
+  const TrueAchievementsCollectionService = require('../api/services/TrueAchievementsCollectionService');
+
+  const users = await User.find({
+    trueAchievementsUsername: { '!=': null },
+  });
+
+  if (users.length === 0) {
+    console.log('No users have a TrueAchievements username set yet. Nothing to do.');
+    return;
   }
 
-  return null;
-}
+  console.log(`Found ${users.length} user(s) with a TrueAchievements username set.\n`);
 
-async function fetchGamerPageGames(username, pagePath, debugLabel) {
-  const executablePath =
-    process.env.CHROMIUM_PATH ||
-    (sails.config.custom ? sails.config.custom.chromiumPath : null) ||
-    '/usr/bin/chromium-browser';
+  for (let i = 0; i < users.length; i += 1) {
+    const user = users[i];
+    console.log(`[${i + 1}/${users.length}] ${user.name} -> TA username: "${user.trueAchievementsUsername}"`);
 
-  let browser;
-  try {
-    browser = await puppeteerExtra.launch({
-      executablePath,
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setUserAgent(BROWSER_UA);
-
-    const url = `https://www.trueachievements.com/gamer/${toTaSlug(username)}/${pagePath}`;
-    console.log(`[TrueAchievements:${debugLabel}] Navigating to: ${url}`);
-
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
-    await new Promise((resolve) => {
-      setTimeout(resolve, 1500);
-    });
-
-    const html = await page.content();
-    const $ = cheerio.load(html);
-
-    const seenSlugs = new Set();
-    const games = [];
-
-    $('a[href^="/game/"]').each((_, el) => {
-      const href = $(el).attr('href') || '';
-
-      // Skip sub-page links (achievements, forum, etc.) -- those share the
-      // same /game/<slug>/... prefix as the plain game-page link.
-      const slugMatch = /^\/game\/([^/]+)\/?$/.exec(href);
-      if (!slugMatch) {
-        return;
-      }
-
-      const slug = slugMatch[1];
-      const name = $(el).text().trim();
-
-      if (!name || seenSlugs.has(slug)) {
-        return;
-      }
-
-      seenSlugs.add(slug);
-
-      games.push({
-        name,
-        slug,
-        platformGuess: guessRowPlatform($, el),
-      });
-    });
-
-    if (games.length === 0) {
-      console.log(
-        `[TrueAchievements:${debugLabel}] No game links matched on the page for "${username}". First 1500 chars of HTML for debugging:`,
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const owned = await TrueAchievementsCollectionService.fetchOwnedGames(
+        user.trueAchievementsUsername,
       );
-      console.log(html.substring(0, 1500));
+
+      console.log(`  Owned (have): ${owned.length} game(s)`);
+      owned.forEach((g) => {
+        console.log(`    - "${g.name}" [platform guess: ${g.platformGuess || 'UNKNOWN'}]`);
+      });
+    } catch (ownedErr) {
+      console.warn(`  Owned-games fetch failed: ${ownedErr.message}`);
     }
 
-    return games;
-  } finally {
-    if (browser) {
-      await browser.close();
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const wishlist = await TrueAchievementsCollectionService.fetchWishlistGames(
+        user.trueAchievementsUsername,
+      );
+
+      console.log(`  Wishlist (want): ${wishlist.length} game(s)`);
+      wishlist.forEach((g) => {
+        console.log(`    - "${g.name}" [platform guess: ${g.platformGuess || 'UNKNOWN'}]`);
+      });
+    } catch (wishlistErr) {
+      console.warn(`  Wishlist fetch failed: ${wishlistErr.message}`);
+    }
+
+    console.log('');
+
+    if (i < users.length - 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => {
+        setTimeout(resolve, DELAY_BETWEEN_GAMERS_MS);
+      });
     }
   }
+
+  console.log('Done. This was a dry run -- nothing in Planka was changed.');
 }
-
-module.exports = {
-  async fetchOwnedGames(username) {
-    return fetchGamerPageGames(username, 'gamecollection', 'owned');
-  },
-
-  async fetchWishlistGames(username) {
-    return fetchGamerPageGames(username, 'wishlist', 'wishlist');
-  },
-
-  // Exposed for the scan script / future tuning.
-  toTaSlug,
-  guessPlatformFromText,
-};
