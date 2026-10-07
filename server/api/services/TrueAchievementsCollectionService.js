@@ -115,12 +115,17 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
     const seenSlugs = new Set();
     const games = [];
 
+    let candidateCount = 0;
+
     $('a[href^="/game/"]').each((_, el) => {
+      candidateCount += 1;
+
       const href = $(el).attr('href') || '';
 
-      // Skip sub-page links (achievements, forum, etc.) -- those share the
-      // same /game/<slug>/... prefix as the plain game-page link.
-      const slugMatch = /^\/game\/([^/]+)\/?$/.exec(href);
+      // Matches "/game/<slug>" with anything after it too (TA's own game
+      // links elsewhere point to "/game/<slug>/achievements", so collection
+      // and wishlist rows likely do the same) -- just take the slug itself.
+      const slugMatch = /^\/game\/([^/]+)/.exec(href);
       if (!slugMatch) {
         return;
       }
