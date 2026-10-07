@@ -30,8 +30,9 @@ const EditUserInformation = React.memo(({ id, onUpdate }) => {
       name: user.name,
       phone: user.phone,
       organization: user.organization,
+      trueAchievementsUsername: user.trueAchievementsUsername,
     }),
-    [user.name, user.phone, user.organization],
+    [user.name, user.phone, user.organization, user.trueAchievementsUsername],
   );
 
   const [data, handleFieldChange] = useForm(() => ({
@@ -39,6 +40,7 @@ const EditUserInformation = React.memo(({ id, onUpdate }) => {
     ...defaultData,
     phone: defaultData.phone || '',
     organization: defaultData.organization || '',
+    trueAchievementsUsername: defaultData.trueAchievementsUsername || '',
   }));
 
   const cleanData = useMemo(
@@ -47,6 +49,7 @@ const EditUserInformation = React.memo(({ id, onUpdate }) => {
       name: data.name.trim(),
       phone: data.phone.trim() || null,
       organization: data.organization.trim() || null,
+      trueAchievementsUsername: data.trueAchievementsUsername.trim() || null,
     }),
     [data],
   );
@@ -96,6 +99,16 @@ const EditUserInformation = React.memo(({ id, onUpdate }) => {
         name="organization"
         value={data.organization}
         maxLength={128}
+        className={styles.field}
+        onChange={handleFieldChange}
+      />
+      <div className={styles.text}>TrueAchievements Username</div>
+      <Input
+        fluid
+        name="trueAchievementsUsername"
+        value={data.trueAchievementsUsername}
+        maxLength={128}
+        placeholder="e.g. ToxicTron420"
         className={styles.field}
         onChange={handleFieldChange}
       />
