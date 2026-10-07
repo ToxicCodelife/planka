@@ -90,6 +90,21 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
     console.log(`[TrueAchievements:${debugLabel}] Navigating to: ${url}`);
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
+
+    // The game list itself renders in after the initial page load (same
+    // async-population pattern as the achievements page's Flag Filter
+    // panel). Wait specifically for a game link to show up rather than a
+    // fixed delay, so this doesn't race ahead of slower loads.
+    await page
+      .waitForSelector('a[href^="/game/"]', { timeout: 10000 })
+      .catch(() => {
+        console.log(
+          `[TrueAchievements:${debugLabel}] No /game/ links appeared within 10s for "${username}".`,
+        );
+      });
+
+    // Small settle delay even after the selector shows up -- the list can
+    // still be populating additional rows right after the first one appears.
     await new Promise((resolve) => {
       setTimeout(resolve, 1500);
     });
@@ -127,10 +142,14 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
     });
 
     if (games.length === 0) {
+      const bodyStart = html.indexOf('<body');
+      const bodySnippet =
+        bodyStart === -1 ? html.substring(0, 2000) : html.substring(bodyStart, bodyStart + 2000);
+
       console.log(
-        `[TrueAchievements:${debugLabel}] No game links matched on the page for "${username}". First 1500 chars of HTML for debugging:`,
+        `[TrueAchievements:${debugLabel}] No game links matched on the page for "${username}" (total HTML length: ${html.length}). First 2000 chars of <body> for debugging:`,
       );
-      console.log(html.substring(0, 1500));
+      console.log(bodySnippet);
     }
 
     return games;
