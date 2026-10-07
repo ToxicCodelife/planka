@@ -83,6 +83,7 @@ export default class extends BaseModel {
     avatar: attr(),
     phone: attr(),
     organization: attr(),
+    trueAchievementsUsername: attr(),
     language: attr(),
     apiKeyPrefix: attr(),
     subscribeToOwnCards: attr(),
