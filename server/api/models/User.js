@@ -93,6 +93,11 @@
  *           nullable: true
  *           description: Organization or company name
  *           example: Acme Corporation
+ *         trueAchievementsUsername:
+ *           type: string
+ *           nullable: true
+ *           description: Linked TrueAchievements gamertag, used to auto-sync owned/wishlisted games
+ *           example: ToxicTron420
  *         language:
  *           type: string
  *           enum: [ar-YE, bg-BG, ca-ES, cs-CZ, da-DK, de-DE, el-GR, en-GB, en-US, es-ES, et-EE, fa-IR, fi-FI, fr-FR, hu-HU, id-ID, it-IT, ja-JP, ko-KR, nl-NL, pl-PL, pt-BR, pt-PT, ro-RO, ru-RU, sk-SK, sr-Cyrl-RS, sr-Latn-RS, sv-SE, tr-TR, uk-UA, uz-UZ, vi-VN, zh-CN, zh-TW]
@@ -351,6 +356,12 @@ module.exports = {
       type: 'string',
       isNotEmptyString: true,
       allowNull: true,
+    },
+    trueAchievementsUsername: {
+      type: 'string',
+      isNotEmptyString: true,
+      allowNull: true,
+      columnName: 'true_achievements_username',
     },
     language: {
       type: 'string',
