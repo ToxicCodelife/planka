@@ -19,6 +19,12 @@ const IgdbService = require('./IgdbService');
 const CoOptimusIndex = require('./CoOptimusIndex');
 const CoOptimusService = require('./CoOptimusService');
 
+// fetchTrueAchievementsFlags already exists on IgdbService.js (built for the
+// card-enrichment feature's "Achievement Flags" comment) -- it searches
+// TrueAchievements for the game, loads its achievements page, and parses
+// out the Cooperative/Versus flag counts and "xN Players Required" flags.
+// Reused here as a third confirmation source.
+
 let igdbTokenPromise = null;
 
 async function getIgdbCreds() {
@@ -78,6 +84,31 @@ async function checkIgdb(gameName) {
   }
 }
 
+async function checkTrueAchievementsFlags(gameName) {
+  try {
+    const taResult = await IgdbService.fetchTrueAchievementsFlags(gameName);
+    if (!taResult || !taResult.flags) {
+      return { checked: true, isMultiplayer: false, reason: 'no TrueAchievements Flag Filter data found' };
+    }
+
+    const { flags } = taResult;
+    const isMultiplayer = Boolean(
+      flags.cooperativeCount || flags.versusCount || (flags.maxPlayersRequired && flags.maxPlayersRequired > 1),
+    );
+
+    return {
+      checked: true,
+      isMultiplayer,
+      reason: isMultiplayer
+        ? `TrueAchievements flags confirm: cooperative=${flags.cooperativeCount || 0}, versus=${flags.versusCount || 0}, maxPlayersRequired=${flags.maxPlayersRequired || '?'}`
+        : 'TrueAchievements has Flag Filter data but no Cooperative/Versus/multi-player-required flags',
+    };
+  } catch (err) {
+    console.warn(`[MultiplayerVerification] TrueAchievements flags check failed for "${gameName}": ${err.message}`);
+    return { checked: false, isMultiplayer: false, reason: `TrueAchievements flags check errored: ${err.message}` };
+  }
+}
+
 async function checkCoOptimus(gameName) {
   try {
     const entry = await CoOptimusIndex.findGameEntry(gameName);
@@ -106,18 +137,27 @@ async function checkCoOptimus(gameName) {
 }
 
 module.exports = {
-  // Returns { isMultiplayer, igdb, coOptimus }. isMultiplayer is true only
-  // if at least one source POSITIVELY confirms co-op/multiplayer support --
-  // a game neither source could check (e.g. no IGDB match AND no
-  // Co-Optimus entry) comes back false rather than defaulting to "pass",
+  // Returns { isMultiplayer, igdb, coOptimus, trueAchievements }.
+  // isMultiplayer is true only if at least one of the three sources
+  // POSITIVELY confirms co-op/versus/multiplayer support -- a game none of
+  // them could check comes back false rather than defaulting to "pass",
   // since the whole point is to keep single-player games off this board.
+  // The TrueAchievements flags check launches its own Chromium instance
+  // (via IgdbService's fetchTrueAchievementsFlags), same as the IGDB and
+  // Co-Optimus checks each do their own network calls -- all three run in
+  // parallel rather than one after another.
   async verifyMultiplayer(gameName) {
-    const [igdb, coOptimus] = await Promise.all([checkIgdb(gameName), checkCoOptimus(gameName)]);
+    const [igdb, coOptimus, trueAchievements] = await Promise.all([
+      checkIgdb(gameName),
+      checkCoOptimus(gameName),
+      checkTrueAchievementsFlags(gameName),
+    ]);
 
     return {
-      isMultiplayer: Boolean(igdb.isMultiplayer || coOptimus.isMultiplayer),
+      isMultiplayer: Boolean(igdb.isMultiplayer || coOptimus.isMultiplayer || trueAchievements.isMultiplayer),
       igdb,
       coOptimus,
+      trueAchievements,
     };
   },
 };
