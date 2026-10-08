@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
 // eslint-disable-next-line import/no-extraneous-dependencies
+const axios = require('axios');
+// eslint-disable-next-line import/no-extraneous-dependencies
 const puppeteerCore = require('puppeteer-core');
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { addExtra } = require('puppeteer-extra');
@@ -83,19 +85,58 @@ function guessRowPlatform($, anchorEl) {
 
 const GAME_LINK_SELECTOR = 'a[href^="/game/"]';
 
+// Shared by both the axios path and the Puppeteer path -- parses whatever
+// HTML it's handed and pulls out { name, slug, platformGuess } for every
+// distinct /game/<slug> link found.
+function extractGamesFromHtml(html) {
+  const $ = cheerio.load(html);
+
+  const seenSlugs = new Set();
+  const games = [];
+  let candidateCount = 0;
+
+  $(GAME_LINK_SELECTOR).each((_, el) => {
+    candidateCount += 1;
+
+    const href = $(el).attr('href') || '';
+
+    // Matches "/game/<slug>" with anything after it too (TA's own game
+    // links elsewhere point to "/game/<slug>/achievements", so collection
+    // and wishlist rows likely do the same) -- just take the slug itself.
+    const slugMatch = /^\/game\/([^/]+)/.exec(href);
+    if (!slugMatch) {
+      return;
+    }
+
+    const slug = slugMatch[1];
+    const name = $(el).text().trim();
+
+    if (!name || seenSlugs.has(slug)) {
+      return;
+    }
+
+    seenSlugs.add(slug);
+
+    games.push({
+      name,
+      slug,
+      platformGuess: guessRowPlatform($, el),
+    });
+  });
+
+  return { games, candidateCount };
+}
+
 // The wishlist page renders its game list into the initial DOM shortly
 // after load -- a plain waitForSelector is enough there (confirmed working).
-// The gamecollection page came back with NO /game/ links at all even after
-// that same wait: a dry run showed only 94852 bytes of HTML vs. the
-// wishlist's 407339 for the same user, and the body was just
-// TrueAchievements' nav chrome plus a data-pt="mygamecollection" marker --
-// no game rows anywhere. TrueAchievements' own help docs describe this view
-// as defaulting to an "Image View" grid, which points to the grid being
-// populated by client-side JS after some additional trigger -- lazy-load on
-// scroll is the most common pattern for that kind of grid. This scrolls the
-// page in steps, re-checking for game links after each one, so it has a
-// real chance of catching a scroll-triggered render without needing to know
-// the exact JS/selectors TrueAchievements uses internally.
+// The gamecollection/games pages have repeatedly come back with NO /game/
+// links at all even after that same wait, a network-idle wait, and a forced
+// reload (all ruled out across several dry runs) -- the resulting page is a
+// near byte-identical ~94KB shell every time, cut off mid-container with no
+// game rows and no XHR/fetch request for game data ever firing. This scroll
+// loop is kept as a last-ditch fallback in case a given account's page
+// genuinely is scroll-lazy-loaded, but the axios-first attempt in
+// fetchGamerPageGames below is the real fix attempt.
 async function waitForGamesWithScroll(page, debugLabel, username) {
   const quickHit = await page
     .waitForSelector(GAME_LINK_SELECTOR, { timeout: 8000 })
@@ -176,7 +217,66 @@ function scanForHints(html) {
   return hints;
 }
 
+// Tries a plain HTTP GET (no browser at all) before paying for a Chromium
+// launch. Several dry runs from this server's own IP showed every XHR/fetch
+// request on the /games page is Cloudflare's OWN background check
+// (cdn-cgi/trace, the challenge-platform validation POST) and never an
+// actual data request -- plus the resulting page is a near-identical ~94KB
+// shell regardless of account. That's consistent with Cloudflare treating
+// requests from this specific browser fingerprint differently than a plain
+// request from this server's own IP (which may have a very different
+// reputation than wherever the stealth-Chromium fingerprint gets profiled).
+// Mirrors the axios-first/Puppeteer-fallback pattern already used by
+// CoOptimusIndex.js and CoOptimusService.js. Returns the games array on
+// success, or null if axios didn't get usable data (not an error by
+// itself -- the caller falls back to Puppeteer either way).
+async function tryAxiosFetch(url, debugLabel, username) {
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      timeout: 15000,
+      validateStatus: (status) => status < 500,
+    });
+
+    if (response.status !== 200 || typeof response.data !== 'string') {
+      console.log(
+        `[TrueAchievements:${debugLabel}] axios GET for "${username}" got status ${response.status} -- falling back to Puppeteer.`,
+      );
+      return null;
+    }
+
+    const { games, candidateCount } = extractGamesFromHtml(response.data);
+
+    if (games.length === 0) {
+      console.log(
+        `[TrueAchievements:${debugLabel}] axios GET for "${username}" returned 200 but 0 game links (length ${response.data.length}, raw anchors seen: ${candidateCount}) -- falling back to Puppeteer.`,
+      );
+      return null;
+    }
+
+    console.log(
+      `[TrueAchievements:${debugLabel}] axios GET for "${username}" succeeded with ${games.length} game(s) -- skipping Puppeteer entirely.`,
+    );
+    return games;
+  } catch (err) {
+    console.log(
+      `[TrueAchievements:${debugLabel}] axios GET for "${username}" failed (${err.message}) -- falling back to Puppeteer.`,
+    );
+    return null;
+  }
+}
+
 async function fetchGamerPageGames(username, pagePath, debugLabel) {
+  const url = `https://www.trueachievements.com/gamer/${toTaSlug(username)}/${pagePath}`;
+
+  const axiosGames = await tryAxiosFetch(url, debugLabel, username);
+  if (axiosGames) {
+    return axiosGames;
+  }
+
   const executablePath =
     process.env.CHROMIUM_PATH ||
     (sails.config.custom ? sails.config.custom.chromiumPath : null) ||
@@ -221,7 +321,6 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
       }
     });
 
-    const url = `https://www.trueachievements.com/gamer/${toTaSlug(username)}/${pagePath}`;
     console.log(`[TrueAchievements:${debugLabel}] Navigating to: ${url}`);
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
@@ -238,22 +337,15 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
       /* no further network activity settled within the window -- continue */
     }
 
-    // A real dry run showed the XHR log for this page is ONLY Cloudflare's
-    // own background checks (cdn-cgi/trace, the challenge-platform
-    // validation POST) -- never an actual request for game data -- and the
-    // resulting page is a near byte-identical ~95KB shell across every
-    // different account tested, cut off mid-container with no game rows.
-    // That points to Cloudflare serving a static "verifying this browser"
-    // response on the FIRST request while its managed-challenge script
-    // validates this session in the background, and only unlocking the
-    // real page on a FOLLOW-UP request -- not by injecting content into
-    // the page already loaded. A plain reload, now that the challenge POST
-    // above has had time to resolve, tests that theory directly.
+    // Ruled out by a dry run: reloading after the initial load didn't
+    // change anything (still 0 games, same ~94KB shell), so Cloudflare
+    // "unlocking on a follow-up request" wasn't the explanation. Kept as a
+    // harmless extra attempt since it's cheap and occasionally still helps
+    // with ordinary transient load hiccups.
     try {
       await page.reload({ waitUntil: 'networkidle2', timeout: 25000 });
-      console.log(`[TrueAchievements:${debugLabel}] Reloaded page for "${username}" after initial load.`);
     } catch (err) {
-      console.log(`[TrueAchievements:${debugLabel}] Reload failed for "${username}": ${err.message}`);
+      /* reload failed -- continue with whatever's already loaded */
     }
 
     const gotLinks = await waitForGamesWithScroll(page, debugLabel, username);
@@ -271,40 +363,7 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
     });
 
     const html = await page.content();
-    const $ = cheerio.load(html);
-
-    const seenSlugs = new Set();
-    const games = [];
-    let candidateCount = 0;
-
-    $(GAME_LINK_SELECTOR).each((_, el) => {
-      candidateCount += 1;
-
-      const href = $(el).attr('href') || '';
-
-      // Matches "/game/<slug>" with anything after it too (TA's own game
-      // links elsewhere point to "/game/<slug>/achievements", so collection
-      // and wishlist rows likely do the same) -- just take the slug itself.
-      const slugMatch = /^\/game\/([^/]+)/.exec(href);
-      if (!slugMatch) {
-        return;
-      }
-
-      const slug = slugMatch[1];
-      const name = $(el).text().trim();
-
-      if (!name || seenSlugs.has(slug)) {
-        return;
-      }
-
-      seenSlugs.add(slug);
-
-      games.push({
-        name,
-        slug,
-        platformGuess: guessRowPlatform($, el),
-      });
-    });
+    const { games, candidateCount } = extractGamesFromHtml(html);
 
     if (games.length === 0) {
       const debugFilePath = await writeDebugHtml(debugLabel, username, html);
@@ -345,11 +404,10 @@ module.exports = {
   // it's a manually-curated ownership list behind that wall, not something
   // this anonymous scraper can read. /games is TrueAchievements' actual
   // core feature (every game the gamer has Xbox Live achievement progress
-  // on), is public with no sign-in wall, and renders as plain server-side
-  // HTML with no lazy-load needed. The trade-off: this won't catch a game
-  // someone owns but has 0% progress on yet (that's ONLY visible on the
-  // sign-in-gated collection page) -- it covers "games they've actually
-  // played," which is the main case.
+  // on), is public with no sign-in wall. The trade-off: this won't catch a
+  // game someone owns but has 0% progress on yet (that's ONLY visible on
+  // the sign-in-gated collection page) -- it covers "games they've
+  // actually played," which is the main case.
   async fetchOwnedGames(username) {
     return fetchGamerPageGames(username, 'games', 'owned');
   },
