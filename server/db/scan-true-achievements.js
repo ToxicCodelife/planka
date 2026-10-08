@@ -65,6 +65,7 @@ async function verifyAndLog(MultiplayerVerificationService, game) {
   );
   console.log(`        IGDB: ${verdict.igdb.reason}`);
   console.log(`        Co-Optimus: ${verdict.coOptimus.reason}`);
+  console.log(`        TrueAchievements flags: ${verdict.trueAchievements.reason}`);
 
   await new Promise((resolve) => {
     setTimeout(resolve, DELAY_BETWEEN_VERIFICATIONS_MS);
