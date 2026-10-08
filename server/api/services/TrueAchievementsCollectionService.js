@@ -152,13 +152,19 @@ function scanForHints(html) {
 
   const checks = [
     [/captcha/i, 'mentions "captcha"'],
-    [/cf-browser-verification|checking your browser/i, 'looks like a Cloudflare challenge page'],
+    [
+      /cf-browser-verification|checking your browser|just a moment|challenge-platform|enable javascript and cookies|cf-chl/i,
+      'looks like a Cloudflare challenge page',
+    ],
     [/sign in|log in|you must be logged in/i, 'mentions signing in / logging in'],
     [/private|not public|has chosen to keep/i, 'mentions a privacy restriction'],
     [/no games (found|match)/i, 'explicitly says no games found/match'],
+    [/this gamer('s| has) (achievements|games)/i, "mentions the gamer's achievements/games generically"],
     [/view and filter/i, 'has a "View and Filter" control (collection page UI)'],
     [/data-pt="mygamecollection"/i, 'confirmed on the My Game Collection page'],
     [/data-pt="gamerwishlist"/i, 'confirmed on the Wishlist page'],
+    [/data-pt="gamerhome"|data-pt="gamergames"|data-pt="games"/i, 'confirmed on a gamer games/home page'],
+    [/404|page not found/i, 'looks like a 404 / not found page'],
   ];
 
   checks.forEach(([regex, label]) => {
