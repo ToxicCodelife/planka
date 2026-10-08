@@ -274,8 +274,20 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
 }
 
 module.exports = {
+  // NOTE: this hits /games (the gamer's public played-games / achievement
+  // history list), not /gamecollection. A dry run confirmed /gamecollection
+  // needs the viewer to be signed in (its page came back with a "sign in /
+  // log in" hint and zero game links, even after the scroll-retry above) --
+  // it's a manually-curated ownership list behind that wall, not something
+  // this anonymous scraper can read. /games is TrueAchievements' actual
+  // core feature (every game the gamer has Xbox Live achievement progress
+  // on), is public with no sign-in wall, and renders as plain server-side
+  // HTML with no lazy-load needed. The trade-off: this won't catch a game
+  // someone owns but has 0% progress on yet (that's ONLY visible on the
+  // sign-in-gated collection page) -- it covers "games they've actually
+  // played," which is the main case.
   async fetchOwnedGames(username) {
-    return fetchGamerPageGames(username, 'gamecollection', 'owned');
+    return fetchGamerPageGames(username, 'games', 'owned');
   },
 
   async fetchWishlistGames(username) {
