@@ -193,10 +193,50 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
     const page = await browser.newPage();
     await page.setUserAgent(BROWSER_UA);
 
+    // The /games and /gamecollection pages both turned out to render an
+    // empty "loading" shell with the actual game list fetched in
+    // separately by client-side JS afterward (confirmed via a debug HTML
+    // dump: the page cut off right after the content container opened,
+    // with "loading" text in place of rows). Logging every XHR/fetch
+    // request this page makes is the only way to see WHAT it's trying to
+    // load and whether that call is failing, slow, or never firing at all.
+    page.on('requestfinished', (req) => {
+      if (req.resourceType() === 'xhr' || req.resourceType() === 'fetch') {
+        const res = req.response();
+        console.log(
+          `[TrueAchievements:${debugLabel}] XHR ${req.method()} ${req.url()} -> ${
+            res ? res.status() : 'no response'
+          }`,
+        );
+      }
+    });
+    page.on('requestfailed', (req) => {
+      if (req.resourceType() === 'xhr' || req.resourceType() === 'fetch') {
+        const failure = req.failure();
+        console.log(
+          `[TrueAchievements:${debugLabel}] XHR FAILED ${req.url()}: ${
+            failure ? failure.errorText : 'unknown error'
+          }`,
+        );
+      }
+    });
+
     const url = `https://www.trueachievements.com/gamer/${toTaSlug(username)}/${pagePath}`;
     console.log(`[TrueAchievements:${debugLabel}] Navigating to: ${url}`);
 
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 25000 });
+
+    // A second, separate network-idle wait -- in case the list's data fetch
+    // kicks off just after the initial page-load settles (which goto's own
+    // networkidle2 wouldn't catch), this gives it a further window to fire
+    // and finish before falling through to the scroll-retry fallback below.
+    // Not fatal if this isn't supported by the installed puppeteer-core
+    // version or if it times out -- either way just moves on.
+    try {
+      await page.waitForNetworkIdle({ idleTime: 1000, timeout: 10000 });
+    } catch (err) {
+      /* no further network activity settled within the window -- continue */
+    }
 
     const gotLinks = await waitForGamesWithScroll(page, debugLabel, username);
 
