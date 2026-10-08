@@ -542,7 +542,7 @@ function combineGenreLists(...lists) {
   return combined;
 }
 
-async function fetchTrueAchievementsFlags(gameTitle) {
+async function fetchTrueAchievementsFlags(gameTitle, { strict = false } = {}) {
   const executablePath =
     process.env.CHROMIUM_PATH ||
     (sails.config.custom ? sails.config.custom.chromiumPath : null) ||
@@ -595,6 +595,22 @@ async function fetchTrueAchievementsFlags(gameTitle) {
     }
 
     if (!bestSlug) {
+      if (strict) {
+        // Used by MultiplayerVerificationService, where a wrong guess is
+        // actively harmful (it can report flags for a completely different
+        // game). The site search's "candidates" set can include stray
+        // sidebar/trending links even when there's no real match for an
+        // unusual or DLC-style title (confirmed: searching "Pinball FX -
+        // Bethesda Pinball" consistently returned an unrelated game as the
+        // only candidate) -- without an exact normalized-name match, there's
+        // nothing trustworthy to fall back to, so this bails out instead of
+        // guessing.
+        console.log(
+          `[TrueAchievements] No exact match for "${gameTitle}" (strict mode) -- not guessing from ${candidates.size} unrelated candidate(s).`,
+        );
+        return null;
+      }
+
       [bestSlug] = candidates;
     }
 
