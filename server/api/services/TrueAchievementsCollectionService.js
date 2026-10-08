@@ -238,6 +238,24 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
       /* no further network activity settled within the window -- continue */
     }
 
+    // A real dry run showed the XHR log for this page is ONLY Cloudflare's
+    // own background checks (cdn-cgi/trace, the challenge-platform
+    // validation POST) -- never an actual request for game data -- and the
+    // resulting page is a near byte-identical ~95KB shell across every
+    // different account tested, cut off mid-container with no game rows.
+    // That points to Cloudflare serving a static "verifying this browser"
+    // response on the FIRST request while its managed-challenge script
+    // validates this session in the background, and only unlocking the
+    // real page on a FOLLOW-UP request -- not by injecting content into
+    // the page already loaded. A plain reload, now that the challenge POST
+    // above has had time to resolve, tests that theory directly.
+    try {
+      await page.reload({ waitUntil: 'networkidle2', timeout: 25000 });
+      console.log(`[TrueAchievements:${debugLabel}] Reloaded page for "${username}" after initial load.`);
+    } catch (err) {
+      console.log(`[TrueAchievements:${debugLabel}] Reload failed for "${username}": ${err.message}`);
+    }
+
     const gotLinks = await waitForGamesWithScroll(page, debugLabel, username);
 
     if (!gotLinks) {
