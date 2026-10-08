@@ -86,7 +86,7 @@ async function checkIgdb(gameName) {
 
 async function checkTrueAchievementsFlags(gameName) {
   try {
-    const taResult = await IgdbService.fetchTrueAchievementsFlags(gameName);
+    const taResult = await IgdbService.fetchTrueAchievementsFlags(gameName, { strict: true });
     if (!taResult || !taResult.flags) {
       return { checked: true, isMultiplayer: false, reason: 'no TrueAchievements Flag Filter data found' };
     }
