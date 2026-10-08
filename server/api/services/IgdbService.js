@@ -1041,3 +1041,10 @@ module.exports = {
 module.exports.fetchTrueAchievementsFlags = fetchTrueAchievementsFlags;
 module.exports.combineGenreLists = combineGenreLists;
 module.exports.isJunkTag = isJunkTag;
+
+// Exposed for MultiplayerVerificationService.js (TrueAchievements sync
+// feature) -- these were previously only used internally by
+// fetchAndAttachCover above.
+module.exports.getIgdbToken = getIgdbToken;
+module.exports.searchIgdbGame = searchIgdbGame;
+module.exports.fetchIgdbMultiplayerModes = fetchIgdbMultiplayerModes;
