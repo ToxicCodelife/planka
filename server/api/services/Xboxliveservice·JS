@@ -1,0 +1,150 @@
+/* eslint-disable no-console */
+// server/api/services/XboxLiveService.js
+//
+// Looks up the games a gamertag has actually played (achievement progress)
+// through OpenXBL (xbl.io), a hosted wrapper around the official Xbox Live
+// API. One API key (generated once by the Planka admin at xbl.io, after
+// signing in with their own Microsoft account) can read the public
+// achievement/title data of ANY gamertag -- the friends never log in.
+//
+// What this CAN'T see, for anyone: Microsoft Store purchase history, owned-
+// but-never-launched games, and the Store wishlist. Microsoft keeps those
+// private to the owning account.
+//
+// UNVERIFIED against the live service (xbl.io's docs weren't reachable while
+// this was written). Endpoints used, from OpenXBL's v2 API:
+// (base URL https://api.xbl.io/v2, per OpenXBL's own curl example)
+//   GET /search/{gamertag}            -> { people: [{ xuid, gamertag }] }
+//   GET /achievements/player/{xuid}   -> { titles: [{ name, titleId,
+//                                                  devices: [...], achievement: {...} }] }
+// The code is written defensively and logs the raw response shape when
+// something doesn't match, so a first real run shows exactly what to adjust.
+//
+// The key is read from the XBL_API_KEY environment variable (or
+// sails.config.custom.xblApiKey) -- never hardcode it in this file.
+
+// eslint-disable-next-line import/no-extraneous-dependencies
+const axios = require('axios');
+
+const BASE_URL = 'https://api.xbl.io/v2';
+
+function getApiKey() {
+  return (
+    process.env.XBL_API_KEY || (sails.config.custom ? sails.config.custom.xblApiKey : null) || null
+  );
+}
+
+function isConfigured() {
+  return Boolean(getApiKey());
+}
+
+async function xblGet(path) {
+  const response = await axios.get(`${BASE_URL}${path}`, {
+    headers: {
+      'X-Authorization': getApiKey(),
+      Accept: 'application/json',
+      'Accept-Language': 'en-US',
+    },
+    timeout: 20000,
+  });
+
+  return response.data;
+}
+
+function previewShape(data) {
+  try {
+    const keys = data && typeof data === 'object' ? Object.keys(data).join(', ') : typeof data;
+    return `top-level keys: [${keys}]; first 400 chars: ${JSON.stringify(data).substring(0, 400)}`;
+  } catch (err) {
+    return '(unprintable response)';
+  }
+}
+
+async function resolveXuid(gamertag) {
+  const data = await xblGet(`/search/${encodeURIComponent(gamertag.trim())}`);
+
+  const people = (data && (data.people || data.profileUsers)) || [];
+
+  if (!Array.isArray(people) || people.length === 0) {
+    console.log(`[XboxLive] No search results for "${gamertag}". ${previewShape(data)}`);
+    return null;
+  }
+
+  const wanted = gamertag.trim().toLowerCase();
+  const exact = people.find(
+    (p) => String(p.gamertag || p.modernGamertag || '').toLowerCase() === wanted,
+  );
+
+  if (!exact) {
+    // Search is fuzzy -- a non-exact first hit is some OTHER player. Don't guess.
+    console.log(
+      `[XboxLive] Search for "${gamertag}" returned ${people.length} result(s) but none matched exactly -- not guessing.`,
+    );
+    return null;
+  }
+
+  return exact.xuid || exact.id || null;
+}
+
+// Xbox Live "devices" -> the same labels the rest of the sync uses.
+function platformFromDevices(devices) {
+  const list = (Array.isArray(devices) ? devices : []).map((d) => String(d).toLowerCase());
+
+  if (list.length === 0) {
+    return null;
+  }
+
+  const has360 = list.some((d) => /360/.test(d));
+  const hasModern = list.some((d) => /(one|series|scarlett|durango)/.test(d));
+
+  if (hasModern) {
+    return 'oneOrSeries';
+  }
+
+  if (has360) {
+    return '360';
+  }
+
+  // PC-only (or Mobile/other) -- not something this board tracks.
+  return 'other';
+}
+
+module.exports = {
+  isConfigured,
+
+  // Returns [{ name, titleId, platformGuess, earned, progress }] or throws.
+  async fetchPlayedGames(gamertag) {
+    if (!isConfigured()) {
+      throw new Error('XBL_API_KEY is not set');
+    }
+
+    const xuid = await resolveXuid(gamertag);
+    if (!xuid) {
+      return [];
+    }
+
+    const data = await xblGet(`/achievements/player/${xuid}`);
+    const titles = data && data.titles;
+
+    if (!Array.isArray(titles)) {
+      console.log(
+        `[XboxLive] Unexpected achievements response for "${gamertag}" (xuid ${xuid}). ${previewShape(data)}`,
+      );
+      return [];
+    }
+
+    return titles
+      .filter((t) => t && t.name)
+      .map((t) => {
+        const ach = t.achievement || {};
+        return {
+          name: String(t.name).trim(),
+          titleId: t.titleId,
+          platformGuess: platformFromDevices(t.devices),
+          earned: ach.currentAchievements,
+          progress: ach.progressPercentage,
+        };
+      })
+      .filter((g) => g.platformGuess !== 'other');
+  },
+};
