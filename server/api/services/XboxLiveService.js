@@ -153,6 +153,14 @@ module.exports = {
       return [];
     }
 
+    // One-time look at the raw shape so platform detection can be checked.
+    const platformCounts = {};
+    titles.forEach((t) => {
+      const key = JSON.stringify(t.devices || null);
+      platformCounts[key] = (platformCounts[key] || 0) + 1;
+    });
+    console.log(`[XboxLive] "${gamertag}" device lists seen: ${JSON.stringify(platformCounts)}`);
+
     return titles
       .filter((t) => t && t.name)
       .map((t) => {
