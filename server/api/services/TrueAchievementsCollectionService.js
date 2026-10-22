@@ -356,6 +356,30 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
       );
     }
 
+    // Long lists are often lazy-loaded as you scroll: keep scrolling to the
+    // bottom until the number of /game/ links stops growing.
+    if (gotLinks) {
+      let lastCount = -1;
+      let stableRounds = 0;
+      for (let step = 0; step < 40 && stableRounds < 3; step += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => {
+          setTimeout(resolve, 1000);
+        });
+        // eslint-disable-next-line no-await-in-loop
+        const count = await page.$$eval(GAME_LINK_SELECTOR, (els) => els.length);
+        if (count === lastCount) {
+          stableRounds += 1;
+        } else {
+          stableRounds = 0;
+          lastCount = count;
+        }
+      }
+      console.log(`[TrueAchievements:${debugLabel}] Scrolled to bottom; ${lastCount} game link(s) on page.`);
+    }
+
     // Small settle delay even after links show up -- the list can still be
     // populating additional rows right after the first one appears.
     await new Promise((resolve) => {
@@ -365,7 +389,12 @@ async function fetchGamerPageGames(username, pagePath, debugLabel) {
     const html = await page.content();
     const { games, candidateCount } = extractGamesFromHtml(html);
 
-    if (games.length === 0) {
+    console.log(
+      `[TrueAchievements:${debugLabel}] Parsed ${games.length} game(s) for "${username}": ` +
+        `${games.map((g) => g.name).join(' | ') || '(none)'}`,
+    );
+
+    if (games.length === 0 || process.env.TA_DEBUG_ALWAYS) {
       const debugFilePath = await writeDebugHtml(debugLabel, username, html);
       const hints = scanForHints(html);
 
