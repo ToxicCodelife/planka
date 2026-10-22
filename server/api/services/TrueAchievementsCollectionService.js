@@ -83,7 +83,9 @@ function guessRowPlatform($, anchorEl) {
   return null;
 }
 
-const GAME_LINK_SELECTOR = 'a[href^="/game/"]';
+// TA renders some game links as relative ("/game/...") and others -- notably
+// the wishlist rows -- as absolute ("https://www.trueachievements.com/game/...").
+const GAME_LINK_SELECTOR = 'a[href^="/game/"], a[href*="trueachievements.com/game/"]';
 
 // Shared by both the axios path and the Puppeteer path -- parses whatever
 // HTML it's handed and pulls out { name, slug, platformGuess } for every
@@ -103,12 +105,16 @@ function extractGamesFromHtml(html) {
     // Matches "/game/<slug>" with anything after it too (TA's own game
     // links elsewhere point to "/game/<slug>/achievements", so collection
     // and wishlist rows likely do the same) -- just take the slug itself.
-    const slugMatch = /^\/game\/([^/]+)/.exec(href);
+    // Also accepts the absolute form, and keeps DLC paths distinct
+    // ("/game/House-Flipper/dlc/Farm" is not the base game).
+    const slugMatch = /^(?:https?:\/\/(?:www\.)?trueachievements\.com)?\/game\/([^/?#]+)(\/dlc\/[^/?#]+)?/i.exec(
+      href,
+    );
     if (!slugMatch) {
       return;
     }
 
-    const slug = slugMatch[1];
+    const slug = slugMatch[1] + (slugMatch[2] || '');
     const name = $(el).text().trim();
 
     if (!name || seenSlugs.has(slug)) {
