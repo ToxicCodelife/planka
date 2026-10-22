@@ -13,9 +13,8 @@
 //
 // UNVERIFIED against the live service (xbl.io's docs weren't reachable while
 // this was written). Endpoints used, from OpenXBL's v2 API:
-// (base URL https://api.xbl.io/v2, per OpenXBL's own curl example)
-//   GET /search/{gamertag}            -> { people: [{ xuid, gamertag }] }
-//   GET /achievements/player/{xuid}   -> { titles: [{ name, titleId,
+//   GET /api/v2/search/{gamertag}            -> { people: [{ xuid, gamertag }] }
+//   GET /api/v2/achievements/player/{xuid}   -> { titles: [{ name, titleId,
 //                                                  devices: [...], achievement: {...} }] }
 // The code is written defensively and logs the raw response shape when
 // something doesn't match, so a first real run shows exactly what to adjust.
@@ -26,7 +25,7 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 const axios = require('axios');
 
-const BASE_URL = 'https://api.xbl.io/v2';
+const BASE_URL = 'https://xbl.io/api/v2';
 
 function getApiKey() {
   return (
