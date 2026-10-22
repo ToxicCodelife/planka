@@ -13,8 +13,9 @@
 //
 // UNVERIFIED against the live service (xbl.io's docs weren't reachable while
 // this was written). Endpoints used, from OpenXBL's v2 API:
-//   GET /api/v2/search/{gamertag}            -> { people: [{ xuid, gamertag }] }
-//   GET /api/v2/achievements/player/{xuid}   -> { titles: [{ name, titleId,
+// (base URL https://api.xbl.io/v2, per OpenXBL's own curl example)
+//   GET /search/{gamertag}            -> { people: [{ xuid, gamertag }] }
+//   GET /achievements/player/{xuid}   -> { titles: [{ name, titleId,
 //                                                  devices: [...], achievement: {...} }] }
 // The code is written defensively and logs the raw response shape when
 // something doesn't match, so a first real run shows exactly what to adjust.
@@ -25,7 +26,7 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 const axios = require('axios');
 
-const BASE_URL = 'https://xbl.io/api/v2';
+const BASE_URL = 'https://api.xbl.io/v2';
 
 function getApiKey() {
   return (
@@ -47,7 +48,9 @@ async function xblGet(path) {
     timeout: 20000,
   });
 
-  return response.data;
+  // The real API wraps everything as { content: {...}, code }.
+  const body = response.data;
+  return body && body.content !== undefined ? body.content : body;
 }
 
 function previewShape(data) {
@@ -70,9 +73,27 @@ async function resolveXuid(gamertag) {
   }
 
   const wanted = gamertag.trim().toLowerCase();
-  const exact = people.find(
-    (p) => String(p.gamertag || p.modernGamertag || '').toLowerCase() === wanted,
+  // displayName was null in the real response, so check every field that
+  // could hold the gamertag.
+  const exact = people.find((p) =>
+    [p.gamertag, p.modernGamertag, p.uniqueModernGamertag, p.displayName]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase() === wanted),
   );
+
+  if (!exact) {
+    console.log(
+      `[XboxLive] Gamertag fields seen for "${gamertag}": ${JSON.stringify(
+        people.map((p) => ({
+          gamertag: p.gamertag,
+          modern: p.modernGamertag,
+          unique: p.uniqueModernGamertag,
+          display: p.displayName,
+          real: p.realName,
+        })),
+      ).substring(0, 500)}`,
+    );
+  }
 
   if (!exact) {
     // Search is fuzzy -- a non-exact first hit is some OTHER player. Don't guess.
