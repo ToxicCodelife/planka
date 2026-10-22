@@ -97,11 +97,18 @@ async function run() {
 
     try {
       // eslint-disable-next-line no-await-in-loop
-      const owned = await TrueAchievementsCollectionService.fetchOwnedGames(
-        user.trueAchievementsUsername,
-      );
+      // "Have" now comes from the Xbox Live API (via xbl.io) instead of
+      // scraping TA's /games page, which never returns data to a scraper.
+      // Assumes the TA username equals the gamertag.
+      // eslint-disable-next-line global-require
+      const XboxLiveService = require('../api/services/XboxLiveService');
+      if (!XboxLiveService.isConfigured()) {
+        throw new Error('XBL_API_KEY environment variable is not set');
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const owned = await XboxLiveService.fetchPlayedGames(user.trueAchievementsUsername);
 
-      console.log(`  Owned (have): ${owned.length} game(s) found on TrueAchievements`);
+      console.log(`  Played (have): ${owned.length} game(s) found via Xbox Live API`);
 
       let ownedCandidateCount = 0;
       // eslint-disable-next-line no-restricted-syntax
