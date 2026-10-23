@@ -182,6 +182,27 @@ module.exports = {
     console.log(`[XboxLive] "${gamertag}" title fields: ${Object.keys(titles[0] || {}).join(', ')}`);
     console.log(`[XboxLive] "${gamertag}" mixed 360+newer samples: ${JSON.stringify(mixedSamples)}`);
 
+    // Compare identifying fields of a known backward-compat 360 game with
+    // known genuine cross-gen releases, to see if any field tells them apart.
+    const probeNames = /^(gears of war 3|dead space 3|minecraft|borderlands|rayman legends|diablo iii|sleeping dogs|call of duty: ghosts|trials fusion)/i;
+    const probe = titles
+      .filter((t) => probeNames.test(String(t.name || '').replace(/[™®]/g, '').trim()))
+      .slice(0, 8)
+      .map((t) => ({
+        name: t.name,
+        devices: t.devices,
+        titleId: t.titleId,
+        modernTitleId: t.modernTitleId,
+        pfn: t.pfn,
+        bingId: t.bingId,
+        alternateTitleIds: t.alternateTitleIds,
+        isBundle: t.isBundle,
+        gamePass: t.gamePass,
+        type: t.type,
+        mediaItemType: t.mediaItemType,
+      }));
+    console.log(`[XboxLive] "${gamertag}" probe (backward-compat vs cross-gen): ${JSON.stringify(probe)}`);
+
     return titles
       .filter((t) => t && t.name)
       .map((t) => {
