@@ -121,7 +121,7 @@ function platformFromDevices(devices) {
   // original 360 games running through backward compatibility (Gears of
   // War 3, Dead Space 3, ...), so anything listing Xbox360 counts as 360.
   if (has360) {
-    return hasModern ? '360+newer' : '360';
+    return '360';
   }
 
   if (hasModern) {
@@ -130,6 +130,32 @@ function platformFromDevices(devices) {
 
   // PC-only (or Mobile/other) -- not something this board tracks.
   return 'other';
+}
+
+// Decides which console VERSION of the game this account actually has.
+// Verified against real data: original 360 titles (even when they list newer
+// consoles through backward compatibility) come back with mediaItemType
+// "Xbox360Game" / "XboxArcadeGame" and no pfn; native One/Series titles are
+// "Application" with a pfn. A game released on both appears as two separate
+// entries, so the entry on the gamer's list IS the version they have.
+function platformFromTitle(t) {
+  const media = String(t.mediaItemType || '').toLowerCase();
+
+  if (/360|arcade/.test(media)) {
+    return '360';
+  }
+
+  if (media === 'application' || t.pfn) {
+    const devices = (Array.isArray(t.devices) ? t.devices : []).map((d) => String(d).toLowerCase());
+    // PC/Windows-only apps aren't on either board.
+    if (devices.length > 0 && !devices.some((d) => /(xboxone|xboxseries|xbox360)/.test(d))) {
+      return 'other';
+    }
+    return 'oneOrSeries';
+  }
+
+  // Unknown media type: fall back to the device list.
+  return platformFromDevices(t.devices);
 }
 
 module.exports = {
@@ -210,7 +236,7 @@ module.exports = {
         return {
           name: String(t.name).trim(),
           titleId: t.titleId,
-          platformGuess: platformFromDevices(t.devices),
+          platformGuess: platformFromTitle(t),
           earned: ach.currentAchievements,
           progress: ach.progressPercentage,
         };
