@@ -117,12 +117,15 @@ function platformFromDevices(devices) {
   const has360 = list.some((d) => /360/.test(d));
   const hasModern = list.some((d) => /(one|series|scarlett|durango)/.test(d));
 
-  if (hasModern) {
-    return 'oneOrSeries';
+  // Real data showed that "Xbox360 + XboxOne + XboxSeries" entries are
+  // original 360 games running through backward compatibility (Gears of
+  // War 3, Dead Space 3, ...), so anything listing Xbox360 counts as 360.
+  if (has360) {
+    return hasModern ? '360+newer' : '360';
   }
 
-  if (has360) {
-    return '360';
+  if (hasModern) {
+    return 'oneOrSeries';
   }
 
   // PC-only (or Mobile/other) -- not something this board tracks.
