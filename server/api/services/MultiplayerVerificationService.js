@@ -136,7 +136,33 @@ async function checkCoOptimus(gameName) {
   }
 }
 
+// Which Xbox generations was this game actually RELEASED on, per IGDB?
+// Used to tell a genuine 360+One release from a 360-only game that merely
+// runs on newer consoles through backward compatibility. Returns
+// { has360, hasModern } or null when IGDB can't say.
+async function getReleasedXboxGenerations(gameName) {
+  try {
+    const creds = await getIgdbCreds();
+    if (!creds) {
+      return null;
+    }
+    const game = await IgdbService.searchIgdbGame(gameName, creds.clientId, creds.token);
+    if (!game || !Array.isArray(game.platforms)) {
+      return null;
+    }
+    return {
+      has360: game.platforms.includes(12),
+      hasModern: game.platforms.includes(49) || game.platforms.includes(169),
+    };
+  } catch (err) {
+    console.warn(`[MultiplayerVerification] IGDB platform lookup failed for "${gameName}": ${err.message}`);
+    return null;
+  }
+}
+
 module.exports = {
+  getReleasedXboxGenerations,
+
   // Returns { isMultiplayer, igdb, coOptimus, trueAchievements }.
   // isMultiplayer is true only if at least one of the three sources
   // POSITIVELY confirms co-op/versus/multiplayer support -- a game none of
