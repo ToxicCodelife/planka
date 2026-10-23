@@ -84,7 +84,7 @@ async function searchIgdbGame(cardTitle, clientId, token) {
   // break out of the Apicalypse string literal.
   const escapedTitle = cardTitle.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const fieldsClause =
-    'fields id, name, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 10;';
+    'fields id, name, platforms, cover.url, genres.name, themes.name, videos.video_id, videos.name; limit 10;';
 
   // IGDB's `search` ranks by its own relevance/popularity, which can put a
   // well-known franchise with an overlapping word (e.g. "The King of
