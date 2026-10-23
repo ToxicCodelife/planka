@@ -161,6 +161,24 @@ module.exports = {
     });
     console.log(`[XboxLive] "${gamertag}" device lists seen: ${JSON.stringify(platformCounts)}`);
 
+    // Sample of "mixed" entries (360 + newer consoles) and the field names the
+    // API gives, to see whether anything says which version was actually played.
+    const mixedSamples = titles
+      .filter((t) => {
+        const d = (t.devices || []).map((x) => String(x).toLowerCase());
+        return d.some((x) => /360/.test(x)) && d.some((x) => /(one|series)/.test(x));
+      })
+      .slice(0, 6)
+      .map((t) => ({
+        name: t.name,
+        titleId: t.titleId,
+        type: t.type,
+        devices: t.devices,
+        lastPlayed: (t.titleHistory && t.titleHistory.lastTimePlayed) || t.lastUnlock,
+      }));
+    console.log(`[XboxLive] "${gamertag}" title fields: ${Object.keys(titles[0] || {}).join(', ')}`);
+    console.log(`[XboxLive] "${gamertag}" mixed 360+newer samples: ${JSON.stringify(mixedSamples)}`);
+
     return titles
       .filter((t) => t && t.name)
       .map((t) => {
